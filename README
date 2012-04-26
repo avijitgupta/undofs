@@ -1,0 +1,460 @@
+=====================================================================
+
+                    DESIGN DOCUMENT - UNDOFS
+
+=====================================================================
+
+
+CSE-506 (Spring 2012) Homework Assignment #3
+
+-------------------------------------------------------------------------------------------------
+
+Created By:    Name               NET ID       SBU ID
+
+            AVIJIT GUPTA             avgupta    108287277
+
+            RAJAN MALHOTRA       rmalhotra        108270772
+
+-------------------------------------------------------------------------------------------------
+
+=======================
+
+PURPOSE OF DOCUMENT
+
+=======================
+
+This document contains major design and plan decisions for the implementation of Undofs- a file restoration stackable filesystem. 
+
+
+============
+
+MOTIVATION
+
+============
+
+In current Linux versions of OS, it is very hard to recover a deleted file until we use some recovery software. So, as such there is nothing a naive user can do to recover his files, even if deleted by mistake. While working on Homework 2 of Wrapfs and becoming aware of the capabilities of a stackable file system, it was observed that Wrapfs is an ideal small template from which one could modify the code to create new functionality. Hence, an idea came to use Wrapfs capabilities to add a functionality of recovering user files, once it is deleted. This idea is referenced as Undofs in this document.
+
+
+=======
+
+SCOPE
+
+=======
+1.
+Deletion of files and successful transfer of deleted files into the user trashbin directory.
+
+2.
+Restoration of files from trashbin directories to their normal location (using ioctls)
+
+3.
+Permanent deletion of files from the trashbin directory (using ioctls)
+
+4.
+Ensure deletion and restoration of hard links and soft links
+
+5.
+Ensuring proper permission checks. Users should not be able to delete or restore files that are not their own.
+
+6.
+Ensure correctness of the filesystem using various testing suites/scripts.
+
+
+
+===================
+
+DESIGN OF UNDOFS
+
+===================
+
+Undofs is a version of wrapfs with which, a user will be able to recover his deleted files. The high level design of undofs requires modification to wrapfs_unlink code to ->rename operation. This will require a dedicated trashbin directory where all the deleted files be moved whenever an unlink is called, or deletion initiated by user by typing 'rm' command.
+
+    
+
+    In order to ensure that user is not allowed to access other user's files, a global .trash directory will be created and it will have user-dedicated trashbins. The trashbins will be named using userid (uid) as .trashbin_<uid>. Whenever user invokes the 'rm' command, the file should land in his trashbin. This ensures privacy and saves from checking user permissions of each file, which would have been an overhead in only one global trashbin.
+
+
+    Once a file moves to the trashbin, it can only be recovered from the trashbin using user Ioctl command. All the operations that user Ioctl will be able to do are:
+
+1. IOSHOWFILES (List)    : This will be used for listing all the files that a user has deleted.
+
+2. IORESTORE (Recover)    : This will be used for recovering/restoring the deleted files to their original source location.
+
+3. IODELETE (Delete)    : This will be used for permanently delete a file by removing it from the trashbin.
+
+4. IOSETDELPOLICY    : This will be required to set the permanent deletion policy - maybe a few days, reboots etc. 
+
+   Each of the above operations are restricted to the dedicated trashbin of a specific user.
+
+
+When do we finally permanently delete a file? <TODO>
+
+    Files in user-trashbin will have the same read-write permissions (i.e. ro/rw rwx) as original file. The global trashbin (.trash) will be created at the mount time and user-specific trashbins will be created dynamically whenever user deletes a file.
+
+
+MAJOR DATA STRUCTURES / FUNCTIONS
+
+-------------------------------------------------------------
+
+
+STRUCTURES
+
+---------------------
+
+/* modified structure to contain global trashbin */
+
+struct wrapfs_sb_info {
+
+       struct super_block *lower_sb;
+
+       struct dentry* trashbin_dentry;                          //global trashbin
+
+};
+
+
+FUNCTIONS
+
+------------------
+
+
+Extended Attributes
+
+----------------------------
+
+
+extern ssize_t wrapfs_getxattr_lower(struct dentry *lower_dentry, const char *name,
+
+                        void *value, size_t size);
+
+- This function is used to receive extended attribute from the lower FS
+
+
+extern ssize_t wrapfs_getxattr(struct dentry *dentry, const char *name, void *value,
+
+                         size_t size);
+
+- This function is used to receive extended attributes stored in name. This makes a call to wrapfs_getxattr_lower.
+
+
+extern int wrapfs_setxattr(struct dentry *dentry, const char *name,
+
+                     const void *value, size_t size, int flags);
+
+- This function is used to set the extended attribute named name
+
+
+extern int wrapfs_removexattr(struct dentry *dentry, const char *name);
+
+- This function removes the extended attribute named name
+
+
+Core Functions
+
+-----------------------
+
+
+void create_path_from_dentry(struct dentry* dentry, char* path, int *pos);
+
+- This recursive function is used to find out the path (file location) of the dentry by using dentry->d_iname and dentry->d_parent. At each recursive call the name is added to the path.
+
+
+extern int restore(char* file_name, struct super_block* sb);
+
+- This function is used to restore files from the .trashbin_<uid> to the original location of the file. It mainly invokes wrapfs_rename and moves file from trash to the original location of the file. This will be called by calling ioctl() using user program, ioctl_user.
+
+
+extern int trashbin_file_delete(char* file_name, struct super_block *sb);
+
+- This function is used to permanently delete files from the .trashbin_<uid> and it cannot be restored at any point of time now. It mainly invokes wrapfs_normal_unlinkn which deletes the file. This will be called by calling ioctl() using user program, ioctl_user.
+
+
+static inline int set_trashbin_dentry(struct super_block* sb, struct dentry* trash_dentry);
+
+- This function is used to set the dentry of the global trashbin and is defined in wrapfs.h
+
+
+static inline struct dentry* get_trashbin_dentry(struct super_block * sb);
+
+- This function is used to get the dentry of the global trashbin and is defined in wrapfs.h
+
+
+static int wrapfs_normal_unlink(struct inode *dir, struct dentry *dentry);
+
+- This function is the original wrapfs_unlink() which does the unlinking of the file. The changed version of ->unlink is kept with the same name as wrapfs_unlink.
+
+
+
+Changes made to functions
+
+--------------------------------------
+
+
+static inline void wrapfs_set_lower_super(struct super_block *sb, struct super_block *val);
+
+- This function is changed to also set the global trash dentry to NULL using: 
+
+WRAPFS_SB(sb)->trashbin_dentry = NULL;
+
+
+static int wrapfs_unlink(struct inode *dir, struct dentry *dentry);
+
+- This function is changed to call wrapfs_rename in  order to move the files from the original location to the .trashbin_<uid>.
+
+
+static int wrapfs_rmdir(struct inode *dir, struct dentry *dentry);
+
+- This function is changed to call wrapfs_rename in order to move the directories from the original location to the .trashbin_<uid>.
+
+
+static long wrapfs_unlocked_ioctl(struct file *file, unsigned int cmd,    unsigned long arg);
+
+- This function is changed to receive user ioctls and take an action (restore/delete) accordingly.
+
+
+
+APPROACH
+
+-----------------
+
+For making this to work, we perform the following steps:
+
+
+Storing the dentry of Global Trashbin 
+
+--------------------------------------------------
+
+
+? Save the dentry of the global trashbin in the wrapfs_sb_info container as trashbin_dentry. 
+
+? Whenever wrapfs is mounted, we create a new dentry using d_alloc() and then we do wrapfs_lookup() for this dentry in the inode of the root. 
+
+If there is no global trashbin, then the dentry received in previous step is negative dentry otherwise a positive dentry of global trashbin. 
+
+
+In case of negative dentry, we create a .trash folder inside root folder.
+
+
+We increase the reference count of the global trashbin dentry and remember to dput() it when we unmount the filesystem.
+
+
+Finally, we save the trashbin_dentry in out modified wrapfs_sb_info structure. All these changes are a part of main.c.
+
+
+Deletion
+
+------------
+
+Whenever 'rm' is issued by a user for a file, wrapfs_unlink() will be called. The following gets done in undofs corresponding to a wrapfs_unlink call:
+
+->wrapfs_unlink receives the inode of the parent directory of the file and the dentry of the file itself. 
+
+
+->wrapfs_rename is invoked from within wrapfs_unlink, where the rename operation basically changes the directory of the deleted file to users trashbin directory. 
+
+
+->wrapfs_rename requires the inode of the user-trashbin and (negative) dentry of the file to which this file has to be moved. We fetch the userid (using the current pointer) and evaluate the name of his trashbin. This name will be passed to ->d_alloc along with the global trashin dentry to create a new dentry as user_trashbin_dentry. This dentry will be looked up using ->wrapfs_lookup in the global trashbin. If the user-trashbin does not exist, then a directory will be created for him as .trashbin_<uid>.
+
+
+We then create a renamed_dentry for the file to be moved in the trashbin. 
+
+
+We use ->d_alloc and pass user_trashbin_dentry and renamed_name of the file. 
+
+
+We then get a new dentry which is looked up using ->wrapfs_lookup and turns it into a negative dentry (assuming that a similarly named file did not exist in the users trashbin) 
+
+
+We then call ->wrapfs_rename, which will move the file from the current location to the user-trashbin having the same name. 
+
+
+It is useful to save file's original location in some form so that the file can restored later using this information. In case of undofs, we save it in form of extended attributes (xattr). The basic xattr functions were taken from ecryptfs and adapted for undofs. Each time we delete a file, we use ->d_path
+
+
+
+Directories /Hard Links/ Soft Links:
+
+We will have to put code similar to modified ->wrapfs_unlink in ->wrapfs_ rmdir.
+
+
+Deleting and restoring files while maintaining the directory structure will be a bit challenging
+
+
+Prof. Zadok advised us to touch this once our basic functionality is working properly.
+
+
+
+USER LEVEL IOCTL 
+
+-----------------------------
+
+
+Once the file has been moved to the trashbin, the user can only restore/delete this file. This can be done only by using ioctls as mentioned above. We have currently coded restoration and permanent deletion ioctls in a user level program (ioctl_user.c). The usage is shown below:
+
+
+./ioctl-user {-r|-d|-h} <filename> path/to/mount/point 
+
+
+-r <filename> - recover, 
+
+-d <filename> - delete 
+
+-h - helpful message. 
+
+
+The invocation of the ioctl user level program invokes the ->unlocked_ioctl function within wrapfs. Depending on the option, restore/trashbin_file_delete methods will be called from within this function. 
+
+
+FILE RESTORE 
+
+----------------------
+
+This functionality is coded in ->restore. The following steps are performed:
+
+user_trashbin_dentry is looked up and then the file to be restored is looked up in this trashbin. If a file is found, then a positive dentry is returned. 
+
+
+From this positive dentry, we obtain the original path of the file which is stored as an extended attribute with the deleted file. 
+
+
+->wrapfs_rename is called and the file is moved to its original location that we get from the return of the xattr call. This is done in a manner similar to which it was done in wrapfs_unlink. We first obtain a negative dentry for the original location and the positive detry of the file in users trashbin, and then call ->wrapfs_rename with these parameters.
+
+
+
+FILE PERMANENT DELETION 
+
+------------------------------------------
+
+This functionality is coded in ->trashbin_file_delete. The following steps are performed:
+
+user_trashbin_dentry is looked up and then the file to be deleted is looked up in this trashbin. If a file is found, then a positive dentry is returned. 
+
+
+From this positive dentry, we obtain the original path of the file which is stored as an extended attribute with the deleted file.
+
+
+->wrapfs_normal_unlink, original version of wrapfs_unlink, is called and the file is removed from the user-trashbin .trashbin_<uid>.
+
+
+
+PERMISSION CHECKS
+
+----------------------------------
+
+       ___________________
+
+       |      .trash  (global)       |
+
+       |       (Mode: 555)             |
+
+       |__________________|
+
+                  |
+
+            |
+
+        _____________|_____________
+
+                  |                        |
+
+ _________|_________        ________|___________
+
+ |   .trashbin_0 (root)         |        |  .trashbin_2301 (user) |
+
+ |       (Mode: 700)       |        |       (Mode: 700)        |
+
+ |__________________|        |___________________|
+
+
+The global trashbin (.trash): All users should have permission to read and execute in that directory since the user specific trashbins are located inside this global trashbin.  Hence it is given the mode : 555
+
+
+The user trashbins (.trashbin_uid): This resides within the global trashbin directory.  The user to which the trashbin belongs must have all permissions on that. No other user should have permissions to even enter that directory. Hence the user level trashbins are given the mode: 700.
+
+
+=================== 
+
+TESTING OF UNDOFS
+
+===================
+
+We will use the incremental model for testing our code.
+
+In the initial stages of the development of Undofs, the code will be tested using the user level code which will be calling the basic system calls.
+
+
+Next step of testing will be to execute system calls using individual unix commands like touch, rm etc.
+
+
+Once the code is fairly stable, the files will be created using vim, saved with data and deleted using various versions of 'rm' command.
+
+
+User permissions will also be tested by creating different users and trying to access /delete /recover other user's files. 
+
+
+
+
+Use Cases
+
+----------------
+
+Following are the use cases that will help us in testing of undofs:
+
+
+1. Login as a different user with restricted permissions and try to delete/recover his/others files.
+
+2. Delete a file using rm command using user level code or command prompt.
+
+3. Recover the same deleted file from the trashbin using the ioctls.
+
+4. Delete a link (soft/hard) using user level code or command prompt.
+
+5. Recover a deleted link (soft/hard) from the trashbin using the ioctls.
+
+ 
+
+A patch script will be run against the code to remove the errors/warnings. After the coding phase is completed, we aim to test it on LTP.
+
+
+=================
+
+CURRENT STATUS
+
+=================
+
+We have started our work on undofs by working out few code samples to test the feasibility of the proposed plan and design. Till now, we have achieved following results:
+
+? Implemented the user level program for invoking ioctls.
+
+? Modified ->wrapfs_unlink to use wrapfs_rename to move the files to trashbin.
+
+? Implemented ->restore (restoring files) and ->trashbin_file_delete (permanent deletion).
+
+? Modified ->wrapfs_unlocked_ioctl to allow user ioctls to restore and delete file.
+
+? Implemented set/get/remove xattr to get/set the original file location.
+
+
+The working code of the current version of undofs is committed in our hw3 repository at- hw3-cse506g04/fs/wrapfs.
+
+ 
+
+==============
+
+FUTURE WORK
+
+==============
+
+There are lot of functionalities which can be added to undofs as part of the future work. But there is one functionality which is very much similar to what undofs offers currently and that is the directory deletion and restoration. If time permits, we will incorporate the directory deletion and restoration using the ioctls.
+
+
+=============
+
+REFERENCES
+
+=============
+
+1. Wrapfs: http://git.fsl.cs.sunysb.edu/?p=wrapfs-latest.git;a=tree
+
+2. Extended Attributes: http://lxr.linux.no/linux+v3.3.1/fs/ecryptfs/inode.c#L1113
+
+3. Ioctl: http://linux.die.net/lkmpg/x892.html
+
