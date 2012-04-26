@@ -146,7 +146,7 @@ static int wrapfs_read_super(struct super_block *sb, void *raw_data, int silent)
                  err = wrapfs_mkdir(dentry_root->d_inode, trashbin_dentry, trashbin_mode);
 		 if(!err)
 		 {
-		 	printk("Created a new .trash in the root directory");
+		 	printk("Created a new .trash in the root directory mode %d", trashbin_mode);
 			trashbin_dentry->d_inode->i_mode |= trashbin_mode;
  	        	lower_inode = wrapfs_lower_inode(trashbin_dentry->d_inode);
 			lower_inode->i_mode |=trashbin_mode;

@@ -462,42 +462,52 @@ static int wrapfs_unlink(struct inode *dir, struct dentry *dentry)
 	int append_pointer=0;
 	int user_trashbin_mode = 0;
 //	struct path path_obtained;
-	char *path_original = NULL;
+	//char *p_o = NULL;
 	char *buf = NULL;
 //	int type;
 	int len_orig_path = 0;
 	char temp_name[PAGE_SIZE];	
+	char* path_original=NULL;
+	char* p_o;
 	int pos = 1;
 	int len_name = 0;
 	struct qstr temp_qstr;
 	struct dentry* temp_dentry;
 	struct dentry* parent_dentry;
+	struct dentry* backward_dentry;
 	struct dentry* orig_temp_dentry;
 	struct dentry* orig_parent_dentry;
 	int temp_imode; 
-	path_original  = kmalloc(PAGE_SIZE* sizeof(char), GFP_KERNEL);
-	if(!path_original)
-	{
-		err = -ENOMEM;
-		goto path_original_out;
-	}
+	
 	buf  = kmalloc(PAGE_SIZE* sizeof(char), GFP_KERNEL);
 	if(!buf)
 	{
 		err = -ENOMEM;
-		goto buf_out;
+		goto out;
 	}
 	
-
+	path_original = kmalloc(PAGE_SIZE, GFP_KERNEL);
+	if(!path_original)
+	{
+		err = -ENOMEM;
+		goto free_buf;
+	}
 	memset(path_original, 0, PAGE_SIZE);
-	path_original = dentry_path_raw(dentry, buf, PAGE_SIZE);
-	len_orig_path = strlen(path_original); // +1 for terminating null
-	path_original[len_orig_path] = '/';	
-	len_orig_path++;
-	path_original[len_orig_path] = 0; // Terminating Null
-	/*TODO: Handle 4096 length  path*/
+	p_o = dentry_path_raw(dentry, buf, PAGE_SIZE);
+	//kfree(buf);
 
+	strcpy(path_original, p_o);	
+
+	len_orig_path = strlen(path_original); // +1 for terminating null
+	if(path_original[len_orig_path-1]!='/')
+	{
+		path_original[len_orig_path] = '/';	
+		len_orig_path++;
+		path_original[len_orig_path] = 0; // Terminating Null
+	}
+	/*TODO: Handle 4096 length  path*/
 	printk(KERN_INFO "Original Path %s", path_original);
+	
 	sb= dir->i_sb;
 	user = current->real_cred->uid;
 	temp_uid = user;
@@ -518,7 +528,7 @@ static int wrapfs_unlink(struct inode *dir, struct dentry *dentry)
 	if(!user_trashbin_string)
 	{
 		err = -ENOMEM;
-		goto out;
+		goto free_path_original;
 
 	} // code enomem
 
@@ -574,6 +584,8 @@ static int wrapfs_unlink(struct inode *dir, struct dentry *dentry)
 
 	parent_dentry = dget(user_trashbin_dentry);
 	orig_parent_dentry = dget(sb->s_root);
+	printk(KERN_INFO "Original path again %s %c", path_original, path_original[pos]);
+	len_name = 0;
 	while(path_original[pos]!=0)
 	{
 		if(path_original[pos] == '/')
@@ -594,14 +606,9 @@ static int wrapfs_unlink(struct inode *dir, struct dentry *dentry)
 
 			orig_temp_dentry =  d_alloc(orig_parent_dentry, &temp_qstr);
 			wrapfs_lookup(orig_parent_dentry->d_inode, orig_temp_dentry, &nd);
-			
-	//		temp_imode = S_IRWXU;
-	//		if(orig_temp_dentry)
-	//		{
-			// Only if user has permission to lookup in this directory will it get a positive dentry.
-	//			if(orig_temp_dentry->d_inode)
-					temp_imode = orig_temp_dentry->d_inode->i_mode;		
-	//		}
+
+
+				temp_imode = orig_temp_dentry->d_inode->i_mode;		
 
 			/// TODO: We need i_mode of original directory, and need to use umask()
 	
@@ -628,15 +635,16 @@ static int wrapfs_unlink(struct inode *dir, struct dentry *dentry)
 			temp_name[len_name++] = path_original[pos++];
 	}
 		
-
+/*
 	if(renamed_dentry)
 	{
 		if(!renamed_dentry->d_inode)printk(KERN_INFO "New Negative Dentry %s", renamed_dentry->d_iname);
 	}
 
+*/
 	wrapfs_rename(dentry->d_parent->d_inode, dentry, parent_dentry->d_inode, renamed_dentry);
 
-out:
+top_out:
 
 	printk(KERN_INFO "Before renamed_dentry");
 	dput(renamed_dentry);
@@ -654,23 +662,15 @@ out:
 		printk(KERN_INFO "Before kfree 1");
 		kfree(user_trashbin_string);
 	}
+free_path_original:
+	if(path_original)
+		kfree(path_original);
+
 free_buf:
 	if(buf)
-	{
-		
-		printk(KERN_INFO "Before kfree buf");
-		kfree(buf);	
-	}
-buf_out:
-	if(path_original)
-	{
-		
-		printk(KERN_INFO "Before kfree path_original");
-		kfree(path_original);
-	
-	}
-//ath_put(&path_obtained);
-path_original_out:
+		kfree(buf);
+out:
+	printk(KERN_INFO "BEforee final exit");
 	return err;
 }
 
