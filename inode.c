@@ -419,6 +419,52 @@ void create_path_from_dentry(struct dentry* dentry, char* path, int *pos)
 
 }
 
+static int wrapfs_normal_unlink(struct inode *dir, struct dentry *dentry)
+{
+	int err;
+	struct dentry *lower_dentry;
+	struct inode *lower_dir_inode = wrapfs_lower_inode(dir);
+	struct dentry *lower_dir_dentry;
+	struct path lower_path;
+
+	wrapfs_get_lower_path(dentry, &lower_path);
+	lower_dentry = lower_path.dentry;
+	dget(lower_dentry);
+	lower_dir_dentry = lock_parent(lower_dentry);
+
+	err = mnt_want_write(lower_path.mnt);
+	if (err)
+		goto out_unlock;
+	err = vfs_unlink(lower_dir_inode, lower_dentry);
+	printk(KERN_INFO "In wrapfs_normal_unlink\n");
+	/*
+	 * Note: unlinking on top of NFS can cause silly-renamed files.
+	 * Trying to delete such files results in EBUSY from NFS
+	 * below.  Silly-renamed files will get deleted by NFS later on, so
+	 * we just need to detect them here and treat such EBUSY errors as
+	 * if the upper file was successfully deleted.
+	 */
+	if (err == -EBUSY && lower_dentry->d_flags & DCACHE_NFSFS_RENAMED)
+		err = 0;
+	if (err)
+		goto out;
+	fsstack_copy_attr_times(dir, lower_dir_inode);
+	fsstack_copy_inode_size(dir, lower_dir_inode);
+	set_nlink(dentry->d_inode,
+		  wrapfs_lower_inode(dentry->d_inode)->i_nlink);
+	dentry->d_inode->i_ctime = dir->i_ctime;
+	d_drop(dentry); /* this is needed, else LTP fails (VFS won't do it) */
+out:
+	mnt_drop_write(lower_path.mnt);
+out_unlock:
+	unlock_dir(lower_dir_dentry);
+	dput(lower_dentry);
+	wrapfs_put_lower_path(dentry, &lower_path);
+	printk(KERN_INFO "returning back from here\n");
+	return err;
+}
+
+
 
 /*
 TODO: Make this compatible with long names. I have just used d_iname
@@ -469,7 +515,7 @@ static int wrapfs_unlink(struct inode *dir, struct dentry *dentry)
 	char temp_name[PAGE_SIZE];	
 	char* path_original=NULL;
 	char* p_o;
-	int pos = 1;
+	int pos = 1, i=1;
 	int len_name = 0;
 	struct qstr temp_qstr;
 	struct dentry* temp_dentry;
@@ -505,9 +551,31 @@ static int wrapfs_unlink(struct inode *dir, struct dentry *dentry)
 		len_orig_path++;
 		path_original[len_orig_path] = 0; // Terminating Null
 	}
+
+
 	/*TODO: Handle 4096 length  path*/
 	printk(KERN_INFO "Original Path %s", path_original);
+	// Original Path has a terminal Slash
+	while(i < strlen(path_original) && path_original[i]!='/')
+	{
+		temp_name[i-1] = path_original[i];
+		i++;
+	}	
 	
+	temp_name[i] = 0; // terminating null . If this is the trashbin path, it should contain .trash
+
+
+//If the user deleted after entering the trashbin.
+	
+	if(strcmp(temp_name, ".trash") == 0)
+	{
+		printk(KERN_INFO "Trashbin file delete");
+		kfree(buf);
+		kfree(path_original);
+		err = wrapfs_normal_unlink(dir, dentry);
+		return err;
+	}
+
 	sb= dir->i_sb;
 	user = current->real_cred->uid;
 	temp_uid = user;
@@ -671,51 +739,6 @@ free_buf:
 		kfree(buf);
 out:
 	printk(KERN_INFO "BEforee final exit");
-	return err;
-}
-
-static int wrapfs_normal_unlink(struct inode *dir, struct dentry *dentry)
-{
-	int err;
-	struct dentry *lower_dentry;
-	struct inode *lower_dir_inode = wrapfs_lower_inode(dir);
-	struct dentry *lower_dir_dentry;
-	struct path lower_path;
-
-	wrapfs_get_lower_path(dentry, &lower_path);
-	lower_dentry = lower_path.dentry;
-	dget(lower_dentry);
-	lower_dir_dentry = lock_parent(lower_dentry);
-
-	err = mnt_want_write(lower_path.mnt);
-	if (err)
-		goto out_unlock;
-	err = vfs_unlink(lower_dir_inode, lower_dentry);
-	printk(KERN_INFO "In wrapfs_normal_unlink\n");
-	/*
-	 * Note: unlinking on top of NFS can cause silly-renamed files.
-	 * Trying to delete such files results in EBUSY from NFS
-	 * below.  Silly-renamed files will get deleted by NFS later on, so
-	 * we just need to detect them here and treat such EBUSY errors as
-	 * if the upper file was successfully deleted.
-	 */
-	if (err == -EBUSY && lower_dentry->d_flags & DCACHE_NFSFS_RENAMED)
-		err = 0;
-	if (err)
-		goto out;
-	fsstack_copy_attr_times(dir, lower_dir_inode);
-	fsstack_copy_inode_size(dir, lower_dir_inode);
-	set_nlink(dentry->d_inode,
-		  wrapfs_lower_inode(dentry->d_inode)->i_nlink);
-	dentry->d_inode->i_ctime = dir->i_ctime;
-	d_drop(dentry); /* this is needed, else LTP fails (VFS won't do it) */
-out:
-	mnt_drop_write(lower_path.mnt);
-out_unlock:
-	unlock_dir(lower_dir_dentry);
-	dput(lower_dentry);
-	wrapfs_put_lower_path(dentry, &lower_path);
-	printk(KERN_INFO "returning back from here\n");
 	return err;
 }
 
