@@ -16,7 +16,7 @@
  * There is no need to lock the wrapfs_super_info's rwsem as there is no
  * way anyone can have a reference to the superblock at this point in time.
  */
-int restore_policy;
+int restore_policy=0;
 
 static int wrapfs_read_super(struct super_block *sb, void *raw_data, int silent)
 {

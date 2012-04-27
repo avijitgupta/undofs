@@ -47,7 +47,8 @@
 #include <asm/uaccess.h>
 /* the file system name */
 #define WRAPFS_NAME "wrapfs"
-
+#define DELETE 0
+#define DONT_DELETE 1
 /* wrapfs root inode number */
 #define WRAPFS_ROOT_INO     1
 
@@ -92,7 +93,7 @@ extern ssize_t wrapfs_listxattr(struct dentry *dentry, char *list, size_t size);
 extern int wrapfs_d_revalidate(struct dentry *dentry, struct nameidata *nd);
 extern int restore(char* file_name, struct super_block* sb);
 extern int trashbin_file_delete(char* file_name, struct super_block *sb);
-
+extern int restore_policy;
 
 /* file private data */
 struct wrapfs_file_info {

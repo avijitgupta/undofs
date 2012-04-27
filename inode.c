@@ -33,7 +33,6 @@
 #define PATH_LEN_MAX 4096
 #define DIRECTORY 0
 #define NORMAL_FILE 1
-int restore_policy;
 //static struct kmem_cache *dentry_cache __read_mostly;
 struct dentry *__my_d_alloc(struct super_block *sb, const struct qstr *name)
 {
@@ -543,6 +542,7 @@ static int wrapfs_unlink(struct inode *dir, struct dentry *dentry)
 	int flag =0;
 	struct dentry* trash_dentry = NULL;
 	struct qstr t_qstr;
+
 //	char temp_trash[PAGE_SIZE];
 	buf  = kmalloc(PAGE_SIZE* sizeof(char), GFP_KERNEL);
 	if(!buf)
@@ -992,6 +992,16 @@ int restore(char* file_name, struct super_block* sb)
 	struct dentry* path_terminal_dentry = NULL;
 	int len_orig_path = 0;
 	struct dentry* err_ptr;
+	char timestamp_string[15];
+	struct dentry* trash_dentry;
+	struct qstr trash_qstr;
+	long int timestamp;
+	int i=0, flag =0;
+	
+	char *new_restore_name = NULL;
+	struct qstr new_restore_qstr;
+	struct dentry* new_restore_dentry;						
+
 	//malloc for lower_path
 	lower_path = kmalloc(sizeof(struct path), GFP_KERNEL);
 	lower_path->dentry = NULL;
@@ -999,7 +1009,7 @@ int restore(char* file_name, struct super_block* sb)
 	//
 	user = current->real_cred->uid;
 	temp_uid = user;
-	
+	printk(KERN_INFO "Restore policy %d", restore_policy);	
 	//We need to keep count =1 for root user with uid =0. Hence do.. while
 	do
 	{
@@ -1209,19 +1219,85 @@ int restore(char* file_name, struct super_block* sb)
 			err = -EEXIST;
 			goto dentry_put;
 		}
-	/*	else
+		else
 		{
-			
+		printk(KERN_INFO "File Exists in original directory");
+		timestamp = restore_dentry->d_inode->i_atime.tv_sec;
+		
+		len_name = strlen(temp_name);
+		
+		new_restore_name = (char*)kmalloc(len_name, GFP_KERNEL);
+		if(!new_restore_name){
+			err = -ENOMEM;	
+			goto dentry_put;
 		}
-*/	}	
+		strcpy(new_restore_name, temp_name);			
+		temp_name[len_name] = '_';
+		len_name++;
 
+		my_itoa(timestamp_string, timestamp);	// Null terminated string
 
-	wrapfs_rename(trashbin_parent_dentry->d_inode, path_terminal_dentry, parent_dentry->d_inode, restore_dentry);
-	nd.flags = file_type? 0: LOOKUP_DIRECTORY; 
-	wrapfs_lookup(parent_dentry->d_inode, restore_dentry, &nd);
+		if(strlen(temp_name) + strlen(timestamp_string) > PAGE_SIZE) // We wont be able to rename the file 
+		{
+			err = -EEXIST;
+			goto dentry_put;
+		}		
 
+		for(i = 0;i<=strlen(timestamp_string);i++)
+		{
+			temp_name[len_name] = timestamp_string[i];
+			len_name++;
+		}
+		temp_name[len_name] = 0; // Terminating null
+
+		printk(KERN_INFO "temp name %s", temp_name);
+
+		fetch_qstr(&trash_qstr, temp_name);
+		trash_dentry = d_alloc(trashbin_parent_dentry, &trash_qstr);
+		flag =1;
+		nd.flags = file_type? 0: LOOKUP_DIRECTORY; 
+		wrapfs_lookup(trashbin_parent_dentry->d_inode, trash_dentry, &nd);
+		if(trash_dentry->d_inode)
+		{
+			err = -EEXIST;
+			goto dentry_put;
+		}
+
+		wrapfs_rename(parent_dentry->d_inode, restore_dentry, trashbin_parent_dentry->d_inode, trash_dentry);
+		
+		// Rajan--------------------------
+		fetch_qstr(&new_restore_qstr, new_restore_name);
+		new_restore_dentry = d_alloc(parent_dentry, &new_restore_qstr);
+		wrapfs_lookup(parent_dentry->d_inode, new_restore_dentry, &nd);
+		if(new_restore_dentry->d_inode){
+			err = -EEXIST;
+			goto dentry_put;
+		}
+		printk(KERN_INFO "Done with the new_restore_dentry : Rename pending");
+				
+		wrapfs_rename(trashbin_parent_dentry->d_inode, path_terminal_dentry, new_restore_dentry->d_parent->d_inode, new_restore_dentry);
+		nd.flags = file_type? 0: LOOKUP_DIRECTORY;
+		wrapfs_lookup(new_restore_dentry->d_inode, new_restore_dentry, &nd);
+		// -------------------------------	
+						
+		}
+	}	
+
+	else
+	{
+		wrapfs_rename(trashbin_parent_dentry->d_inode, path_terminal_dentry, parent_dentry->d_inode, restore_dentry);
+		nd.flags = file_type? 0: LOOKUP_DIRECTORY; 
+		wrapfs_lookup(parent_dentry->d_inode, restore_dentry, &nd);
+	}
 
 dentry_put:
+	if(!new_restore_name)
+		kfree(new_restore_name);
+	if(flag)
+	{
+		dput(trash_dentry);
+		dput(new_restore_dentry);
+	}
 	dput(restore_dentry);
 	dput(trashbin_parent_dentry);
 	dput(parent_dentry);
