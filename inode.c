@@ -1375,13 +1375,45 @@ out:
 }
 
 // TODO: Handle empty directory deletion
+
+static int wrapfs_normal_rmdir(struct inode *dir, struct dentry *dentry)
+{
+        struct dentry *lower_dentry;
+        struct dentry *lower_dir_dentry;
+        int err;
+        struct path lower_path;
+
+        wrapfs_get_lower_path(dentry, &lower_path);
+        lower_dentry = lower_path.dentry;
+        lower_dir_dentry = lock_parent(lower_dentry);
+
+        err = mnt_want_write(lower_path.mnt);
+        if (err)
+                goto out_unlock;
+        err = vfs_rmdir(lower_dir_dentry->d_inode, lower_dentry);
+        if (err)
+                goto out;
+
+        d_drop(dentry); /* drop our dentry on success (why not VFS's job?) */
+        if (dentry->d_inode)
+                clear_nlink(dentry->d_inode);
+        fsstack_copy_attr_times(dir, lower_dir_dentry->d_inode);
+        fsstack_copy_inode_size(dir, lower_dir_dentry->d_inode);
+        set_nlink(dir, lower_dir_dentry->d_inode->i_nlink);
+
+out:
+        mnt_drop_write(lower_path.mnt);
+out_unlock:
+        unlock_dir(lower_dir_dentry);
+        wrapfs_put_lower_path(dentry, &lower_path);
+        return err;
+}
+
+
+
 static int wrapfs_rmdir(struct inode *dir, struct dentry *dentry)
 {
-	struct dentry *lower_dentry;
-	struct dentry *lower_dir_dentry;
-	int err;
-	struct path lower_path;
-//////////////////////////////////////////////////////////////////	
+	int err = 0;
 	int len_name = 0;
 	char temp_name[PAGE_SIZE];
 	struct qstr temp_qstr;	
@@ -1401,7 +1433,7 @@ static int wrapfs_rmdir(struct inode *dir, struct dentry *dentry)
 	uid_t user, temp_uid;	
 	char* user_trashbin_string;
 //	int len_renamed;
-	int num_digits_uid=0;
+	int num_digits_uid=0, i;
 	int user_trashbin_len=0;	
 	char* trashbin_prepend_name = ".trashbin_";
 	int append_pointer=0;
@@ -1439,6 +1471,26 @@ static int wrapfs_rmdir(struct inode *dir, struct dentry *dentry)
 		path_original[len_orig_path] = '/';	
 		len_orig_path++;
 		path_original[len_orig_path] = 0; // Terminating Null
+	}
+	i=1;
+	while(i < strlen(path_original) && path_original[i]!='/')
+	{
+		temp_name[i-1] = path_original[i];
+		i++;
+	}	
+	
+	temp_name[i] = 0; // terminating null . If this is the trashbin path, it should contain .trash
+
+
+//If the user deleted after entering the trashbin.
+	
+	if(strcmp(temp_name, ".trash") == 0)
+	{
+		printk(KERN_INFO "Trashbin file delete");
+		kfree(buf);
+		kfree(path_original);
+		err = wrapfs_normal_rmdir(dir, dentry);
+		return err;
 	}
 // / appended path in path_original
 
@@ -1557,36 +1609,10 @@ static int wrapfs_rmdir(struct inode *dir, struct dentry *dentry)
 			temp_name[len_name++] = path_original[pos++];
 	}
 
+	err = wrapfs_normal_rmdir(dir, dentry);
 
 
 
-////////////////////////////Normal Rmdir//////////////////////////////////////
-	
-	wrapfs_get_lower_path(dentry, &lower_path);
-	lower_dentry = lower_path.dentry;
-	lower_dir_dentry = lock_parent(lower_dentry);
-
-	err = mnt_want_write(lower_path.mnt);
-	if (err)
-		goto out_unlock;
-	err = vfs_rmdir(lower_dir_dentry->d_inode, lower_dentry);
-	if (err)
-		goto out;
-
-	printk(KERN_INFO "Before DROPPING");
- 
-	d_drop(dentry);	 //drop our dentry on success (why not VFS's job?) 
-	if (dentry->d_inode)
-		clear_nlink(dentry->d_inode);
-	fsstack_copy_attr_times(dir, lower_dir_dentry->d_inode);
-	fsstack_copy_inode_size(dir, lower_dir_dentry->d_inode);
-	set_nlink(dir, lower_dir_dentry->d_inode->i_nlink);
-
-out:
-	mnt_drop_write(lower_path.mnt);
-out_unlock:
-	unlock_dir(lower_dir_dentry);
-	wrapfs_put_lower_path(dentry, &lower_path);
 put_dentries:
 	dput(trashbin_dentry);
 	dput(user_trashbin_dentry);
