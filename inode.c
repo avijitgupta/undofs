@@ -33,6 +33,7 @@
 #define PATH_LEN_MAX 4096
 #define DIRECTORY 0
 #define NORMAL_FILE 1
+//#define DELETE_KEEPING_SAME_NAME
 //static struct kmem_cache *dentry_cache __read_mostly;
 struct dentry *__my_d_alloc(struct super_block *sb, const struct qstr *name)
 {
@@ -1281,13 +1282,13 @@ int restore(char* file_name, struct super_block* sb)
 		wrapfs_lookup(new_restore_dentry->d_parent->d_inode, new_restore_dentry, &nd);
 //		 err = vfs_path_lookup(new_restore_dentry, current->fs->pwd.mnt , new_restore_name, nd.flags , &trash_temp_path);
 	
-
+#ifdef DELETE_KEEPING_SAME_NAME
 		//making dentry null again - This works because we have a positive dentry - ->wrapfs_lookup terminates early
 //		trash_dentry->d_op = NULL;
 //		trash_dentry->d_inode = NULL;
 //		fetch_qstr(&trash_temp_qstr, temp_name);
 //		trash_temp_dentry = my_d_alloc(trashbin_parent_dentry, &trash_temp_qstr);
-/*		printk(KERN_INFO "Before vfs_path_lookup");
+		printk(KERN_INFO "Before vfs_path_lookup");
 	        err = vfs_path_lookup(trashbin_parent_dentry, current->fs->pwd.mnt , temp_name, nd.flags , &trash_temp_path);
 //		wrapfs_lookup(trashbin_parent_dentry->d_inode, trash_temp_dentry, &nd);
 		if(err !=0)
@@ -1317,14 +1318,15 @@ int restore(char* file_name, struct super_block* sb)
 			printk(KERN_INFO "Negative dentry");
 		}
 		
-		//wrapfs_rename(trashbin_parent_dentry->d_inode, trash_temp_path.dentry, trashbin_parent_dentry->d_inode, original_dentry);
-		//wrapfs_lookup(trashbin_parent_dentry->d_inode, original_dentry, &nd);
+		wrapfs_rename(trashbin_parent_dentry->d_inode, trash_temp_path.dentry, trashbin_parent_dentry->d_inode, original_dentry);
+		wrapfs_lookup(trashbin_parent_dentry->d_inode, original_dentry, &nd);
 
 		if(original_dentry->d_inode)
 		{
 			printk(KERN_INFO "positive dentry now");
 		}
-		*/
+		
+#endif
 		}
 		
 	}	
@@ -1336,11 +1338,12 @@ int restore(char* file_name, struct super_block* sb)
 		wrapfs_lookup(parent_dentry->d_inode, restore_dentry, &nd);
 	}
 
-/*
+#ifdef DELETE_KEEPING_SAME_NAME
 original_dentry_put:
 	if(flag)
 		dput(original_dentry);	
-*/
+#endif
+
 dentry_put:
 //	if(!new_restore_name)// WTF??
 	if(new_restore_name)
@@ -1350,8 +1353,10 @@ dentry_put:
 	{
 		dput(trash_dentry);
 		dput(new_restore_dentry);
-//		if(trash_temp_path.dentry)
-//			path_put(&trash_temp_path);
+#ifdef DELETE_KEEPING_SAME_NAME
+		if(trash_temp_path.dentry)
+			path_put(&trash_temp_path);
+#endif
 		//dput(trash_temp_dentry);
 	}
 	dput(restore_dentry);
