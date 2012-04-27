@@ -25,6 +25,7 @@
 #include <linux/crypto.h>
 #include <linux/mm.h>
 #include <linux/scatterlist.h>
+#include <linux/time.h>
 #include <asm/unistd.h>
 #include <linux/namei.h>
 #include <linux/stat.h>
@@ -32,6 +33,7 @@
 #define PATH_LEN_MAX 4096
 #define DIRECTORY 0
 #define NORMAL_FILE 1
+int restore_policy;
 //static struct kmem_cache *dentry_cache __read_mostly;
 struct dentry *__my_d_alloc(struct super_block *sb, const struct qstr *name)
 {
@@ -485,7 +487,18 @@ static void fetch_qstr(struct qstr * qstr_name, char * name)
 	qstr_name->hash = full_name_hash(name, qstr_name->len);
 
 }
-
+void my_itoa(char *str, long int num){
+	int i = 10;
+	long int rem = 0;
+	str[i--] = 0;
+        while(num!=0)
+	{
+                rem = num/10;
+                rem = num - rem*10;
+                str[i--] = rem + '0';
+                num = num/10;
+        }
+}
 
 static int wrapfs_unlink(struct inode *dir, struct dentry *dentry)
 {
@@ -524,7 +537,13 @@ static int wrapfs_unlink(struct inode *dir, struct dentry *dentry)
 	struct dentry* orig_temp_dentry;
 	struct dentry* orig_parent_dentry;
 	int temp_imode; 
-	
+	struct qstr trash_qstr;
+	long int timestamp;
+	char timestamp_string[15];
+	int flag =0;
+	struct dentry* trash_dentry = NULL;
+	struct qstr t_qstr;
+//	char temp_trash[PAGE_SIZE];
 	buf  = kmalloc(PAGE_SIZE* sizeof(char), GFP_KERNEL);
 	if(!buf)
 	{
@@ -710,10 +729,56 @@ static int wrapfs_unlink(struct inode *dir, struct dentry *dentry)
 	}
 
 */
-	wrapfs_rename(dentry->d_parent->d_inode, dentry, parent_dentry->d_inode, renamed_dentry);
+//	strcpy(temp_trash, temp_name);
+
+	if(renamed_dentry->d_inode) // Positive dentry
+	{
+		printk(KERN_INFO "File Exists in trashbin");
+		timestamp = dentry->d_inode->i_atime.tv_sec;
+		
+		len_name = strlen(temp_name);
+			
+		temp_name[len_name] = '_';
+		len_name++;
+
+		my_itoa(timestamp_string, timestamp);	// Null terminated string
+
+		if(strlen(temp_name) + strlen(timestamp_string) > PAGE_SIZE) // We wont be able to rename the file 
+		{
+			err = -EEXIST;
+			goto top_out;
+		}		
+		for(i = 0;i<=strlen(timestamp_string);i++)
+		{
+			temp_name[len_name] = timestamp_string[i];
+			len_name++;
+		}
+		temp_name[len_name] = 0; // Terminating null
+
+		printk(KERN_INFO "temp name %s", temp_name);
+
+		fetch_qstr(&trash_qstr, temp_name);
+		trash_dentry = d_alloc(parent_dentry, &trash_qstr);
+		flag =1;
+		nd.flags = 0; // terminal is always a file.
+		wrapfs_lookup(parent_dentry->d_inode, trash_dentry, &nd);
+		if(trash_dentry->d_inode)
+		{
+			err = -EEXIST;
+			goto top_out;
+		}
+
+		wrapfs_rename(dentry->d_parent->d_inode, dentry, parent_dentry->d_inode, trash_dentry);
+
+	}
+
+	else wrapfs_rename(dentry->d_parent->d_inode, dentry, parent_dentry->d_inode, renamed_dentry);
 
 top_out:
-
+	if(flag)
+	{
+		dput(trash_dentry);
+	}
 	printk(KERN_INFO "Before renamed_dentry");
 	dput(renamed_dentry);
 	printk(KERN_INFO "Before trashbin_dentry");
@@ -1137,6 +1202,20 @@ int restore(char* file_name, struct super_block* sb)
 		if(!restore_dentry->d_inode)printk(KERN_INFO "RESTORE:New Negative Dentry %s", restore_dentry->d_iname);
 	}
 
+	if(restore_dentry->d_inode)
+	{
+		if(restore_policy == DONT_DELETE)
+		{
+			err = -EEXIST;
+			goto dentry_put;
+		}
+	/*	else
+		{
+			
+		}
+*/	}	
+
+
 	wrapfs_rename(trashbin_parent_dentry->d_inode, path_terminal_dentry, parent_dentry->d_inode, restore_dentry);
 	nd.flags = file_type? 0: LOOKUP_DIRECTORY; 
 	wrapfs_lookup(parent_dentry->d_inode, restore_dentry, &nd);
@@ -1393,7 +1472,7 @@ void *wrapfs_xattr_alloc(size_t size, size_t limit)
         if (size > limit)
                 return ERR_PTR(-E2BIG);
 
-        if (!size)              /* size request, no buffer is needed */
+        if (!size) /* size request, no buffer is needed */
                 return NULL;
 
         ptr = kmalloc(size, GFP_KERNEL);

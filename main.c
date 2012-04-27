@@ -16,6 +16,8 @@
  * There is no need to lock the wrapfs_super_info's rwsem as there is no
  * way anyone can have a reference to the superblock at this point in time.
  */
+int restore_policy;
+
 static int wrapfs_read_super(struct super_block *sb, void *raw_data, int silent)
 {
 	int err = 0;
@@ -193,6 +195,13 @@ struct dentry *wrapfs_mount(struct file_system_type *fs_type, int flags,
 			    const char *dev_name, void *raw_data)
 {
 	void *lower_path_name = (void *) dev_name;
+	char* mount_flags = (char*)raw_data;
+	//printk(KERN_INFO "%s", mount_flags);
+	if(strcmp(mount_flags, "delete")==0)
+		restore_policy = DELETE;		
+		
+	else 
+		restore_policy = DONT_DELETE;
 
 	return mount_nodev(fs_type, flags, lower_path_name,
 			   wrapfs_read_super);
