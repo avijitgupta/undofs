@@ -197,7 +197,7 @@ struct dentry *wrapfs_mount(struct file_system_type *fs_type, int flags,
 	void *lower_path_name = (void *) dev_name;
 	char* mount_flags = (char*)raw_data;
 	//printk(KERN_INFO "%s", mount_flags);
-	if(strcmp(mount_flags, "delete")==0)
+	if(mount_flags && strcmp(mount_flags, "delete")==0)
 		restore_policy = DELETE;		
 		
 	else 
