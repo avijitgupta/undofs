@@ -1,16 +1,10 @@
 #include <sys/ioctl.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <sys/mman.h>
+#include <stdbool.h>
 #include <malloc.h>
+#include <fcntl.h>
 #include <unistd.h>
-#include <ctype.h>
-#include <stdlib.h>
+#include <string.h>
 #include <errno.h>
 
 #include "ioctl_user.h"
@@ -19,69 +13,41 @@ int main(int argc, char **argv)
 {
 	/* Initialization of the variables */
 	int index, c, errno;
-        enum UNDOFS_OP
-        {
-                LIST,
-                RESTORE,
-                DELETE,
-                INFO,
-                NOT_SET
-        }key_operation;
-        int i, rval,fd, md5_ret=0;
-        key_operation = NOT_SET;
+        bool restore_flag = false;
+        int i, rval=-1, fd, md5_ret=0;
         char path_to_mount[PATH_MAXLEN];
         char file[PATH_MAXLEN];
 	errno = 0;
-	opterr = 0;
 		
 	/* process the command line arguments */
-	while ((c = getopt(argc, argv, "ld:r:h")) != -1)
+	while ((c = getopt(argc, argv, "r:h")) != -1)
 	{
 		switch (c)
 		{
-		        case 'l': 
-				if(key_operation == NOT_SET)
-	                                key_operation = LIST;
-        	                else{
-					errno = EINVAL;
-                	                printf("Choose only one operation at a time\n");
-                                	goto out;
-                        	}
-                        	break;
-
-			case 'd':
-				if(key_operation == NOT_SET){
-        	                	key_operation = DELETE;
-					strncpy(file, optarg, PATH_MAXLEN);
-				}
-	                        else{  
-                                        errno = EINVAL;
-                                        printf("Give only -d option to permanently delete the file.\n");
-                                        goto out;
-                                }
-
-				if(!optarg){
-					errno = EINVAL;
-					printf("Option -d requires an argument.\n");
-					goto out;
-				}
-			        break;
-
 			case 'r':       
-				if(key_operation == NOT_SET){
-                                	key_operation = RESTORE;
-	                                strncpy(file, optarg, PATH_MAXLEN);
+				if(restore_flag == false){
+                                	restore_flag = true;
+					if((optarg = strstr(optarg, ".trash/"))!= NULL){
+		                                strncpy(file, optarg, PATH_MAXLEN);
+						printf("File to be restored : %s\n", file);
+					}
+					else{
+						errno = -EINVAL;
+						printf("Please give path name with /.trash/\n");
+						goto out;
+					}
+					
         	                }
                 	        else{
-					errno = EINVAL;
+					errno = -EINVAL;
                         	        printf("Choose only one operation at a time\n");
 					goto out;
 	                        }
         	                break;
 	
 			case 'h':
-				printf("Usage :./ioctl {-d} [-h HELP] <mount point>.\n");
-				printf("    -d:  to delete a file\n");
+				printf("Usage :./ioctl {-r} [-h HELP] <mount point>.\n");
+				printf("    -r:  to restore a file\n");
 				printf("    -h:  to provide a helpful usage message\n");
 				printf("    mount point: point where filesystem is mounted\n");
 				errno = -EINVAL;
@@ -98,8 +64,8 @@ int main(int argc, char **argv)
 	}
 
 	/* checking if decryption or encryption flag is set or not*/
-	if(key_operation == NOT_SET){
-		printf("Usage :./ioctl {-d} [-h HELP] <mount point>.\n");
+	if(restore_flag == false){
+		printf("Usage :./ioctl {-r} [-h HELP] <mount point>.\n");
 		printf("See more usage with : ./ioctl -h\n");
 		errno = -EINVAL;
 		goto out;
@@ -107,7 +73,7 @@ int main(int argc, char **argv)
 
 	/* filenames missing in the command line arguments */
 	if(optind+1 > argc){
-		printf("Filename/Mount Directory  missing in Non-option arguments listed\n");
+		printf("Arguments missing in command line. Please use ./ioctl -h\n");
 		errno = -EINVAL;
 		goto out;
 	}
@@ -141,42 +107,12 @@ int main(int argc, char **argv)
 	        goto out;
     	}
 
-        switch(key_operation)
-        {
-                case LIST:
-                        printf("Switch - List\n");
-                        break;
-
-                case RESTORE:
-                        printf("Switch - Restore\n");
-			rval = ioctl(fd, IORESTORE, file);
-                        if(rval < 0){
-				errno = rval;
-                        	printf("ioctl error : %d\n", errno);
-				goto out;
-                        }
-                        break;
-
-                case DELETE:
-                        printf("Switch - Delete\n");
-			rval = ioctl(fd, IODELETE, file);
-			if(rval < 0){
-				errno = rval;
-				printf("ioctl error : %d\n", errno);
-				goto out;
-			}
-                        break;
-
-                case INFO:
-                        printf("Switch - Info\n");
-                        break;
-
-                case NOT_SET:
-                        printf("Switch - Not Set\n");
-                        break;
-                default:
-                        printf("In default");
-
+	if(restore_flag){
+		rval = ioctl(fd, IORESTORE, file);
+		if(rval < 0){
+			errno = rval;
+			printf("ioctl error : %d\n", errno);
+		}
         }
 
 out:
