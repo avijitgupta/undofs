@@ -997,11 +997,13 @@ int restore(char* file_name, struct super_block* sb)
 	struct qstr trash_qstr;
 	long int timestamp;
 	int i=0, flag =0;
-	
+	struct dentry* original_dentry;
 	char *new_restore_name = NULL;
 	struct qstr new_restore_qstr;
 	struct dentry* new_restore_dentry;						
-
+	struct qstr original_qstr;
+	struct path trash_temp_path;
+	struct qstr trash_temp_qstr;
 	//malloc for lower_path
 	lower_path = kmalloc(sizeof(struct path), GFP_KERNEL);
 	lower_path->dentry = NULL;
@@ -1137,7 +1139,7 @@ int restore(char* file_name, struct super_block* sb)
 	//once we receive the original path, we must make the path if it does not exist
 
 
-	if(err = -ENOENT || err == 0)
+	if(err == -ENOENT || err == 0)
 	{
 		err = 0;
 	}
@@ -1265,7 +1267,6 @@ int restore(char* file_name, struct super_block* sb)
 
 		wrapfs_rename(parent_dentry->d_inode, restore_dentry, trashbin_parent_dentry->d_inode, trash_dentry);
 		
-		// Rajan--------------------------
 		fetch_qstr(&new_restore_qstr, new_restore_name);
 		new_restore_dentry = d_alloc(parent_dentry, &new_restore_qstr);
 		wrapfs_lookup(parent_dentry->d_inode, new_restore_dentry, &nd);
@@ -1277,10 +1278,55 @@ int restore(char* file_name, struct super_block* sb)
 				
 		wrapfs_rename(trashbin_parent_dentry->d_inode, path_terminal_dentry, new_restore_dentry->d_parent->d_inode, new_restore_dentry);
 		nd.flags = file_type? 0: LOOKUP_DIRECTORY;
-		wrapfs_lookup(new_restore_dentry->d_inode, new_restore_dentry, &nd);
-		// -------------------------------	
-						
+		wrapfs_lookup(new_restore_dentry->d_parent->d_inode, new_restore_dentry, &nd);
+//		 err = vfs_path_lookup(new_restore_dentry, current->fs->pwd.mnt , new_restore_name, nd.flags , &trash_temp_path);
+	
+
+		//making dentry null again - This works because we have a positive dentry - ->wrapfs_lookup terminates early
+//		trash_dentry->d_op = NULL;
+//		trash_dentry->d_inode = NULL;
+//		fetch_qstr(&trash_temp_qstr, temp_name);
+//		trash_temp_dentry = my_d_alloc(trashbin_parent_dentry, &trash_temp_qstr);
+/*		printk(KERN_INFO "Before vfs_path_lookup");
+	        err = vfs_path_lookup(trashbin_parent_dentry, current->fs->pwd.mnt , temp_name, nd.flags , &trash_temp_path);
+//		wrapfs_lookup(trashbin_parent_dentry->d_inode, trash_temp_dentry, &nd);
+		if(err !=0)
+		{
+			goto dentry_put; 
 		}
+		if(trash_temp_path.dentry->d_inode)
+		{
+			printk(KERN_INFO "Received a +ve dentry inode");
+		}	
+					
+	//	restore_dentry->d_inode = NULL;
+	//	restore_dentry->d_op = NULL;
+	  //      wrapfs_lookup(parent_dentry->d_inode, restore_dentry, &nd);
+
+	//	if(!restore_dentry->d_inode)
+	//	{
+	//		printk(KERN_INFO "Negative dentry");
+	//	}
+	
+		fetch_qstr(&original_qstr, new_restore_name);
+		original_dentry = d_alloc(trashbin_parent_dentry, &original_qstr);
+		wrapfs_lookup(trashbin_parent_dentry->d_inode, original_dentry, &nd);
+	
+		if(!original_dentry->d_inode)
+		{
+			printk(KERN_INFO "Negative dentry");
+		}
+		
+		//wrapfs_rename(trashbin_parent_dentry->d_inode, trash_temp_path.dentry, trashbin_parent_dentry->d_inode, original_dentry);
+		//wrapfs_lookup(trashbin_parent_dentry->d_inode, original_dentry, &nd);
+
+		if(original_dentry->d_inode)
+		{
+			printk(KERN_INFO "positive dentry now");
+		}
+		*/
+		}
+		
 	}	
 
 	else
@@ -1290,13 +1336,23 @@ int restore(char* file_name, struct super_block* sb)
 		wrapfs_lookup(parent_dentry->d_inode, restore_dentry, &nd);
 	}
 
+/*
+original_dentry_put:
+	if(flag)
+		dput(original_dentry);	
+*/
 dentry_put:
-	if(!new_restore_name)
+//	if(!new_restore_name)// WTF??
+	if(new_restore_name)
 		kfree(new_restore_name);
+	
 	if(flag)
 	{
 		dput(trash_dentry);
 		dput(new_restore_dentry);
+//		if(trash_temp_path.dentry)
+//			path_put(&trash_temp_path);
+		//dput(trash_temp_dentry);
 	}
 	dput(restore_dentry);
 	dput(trashbin_parent_dentry);
@@ -1324,6 +1380,15 @@ static int wrapfs_rmdir(struct inode *dir, struct dentry *dentry)
 	struct path lower_path;
 	
 	printk(KERN_INFO "Inside rmdir");
+
+
+
+
+
+
+
+
+////////////////////////////Normal Rmdir//////////////////////////////////////
 	
 	wrapfs_get_lower_path(dentry, &lower_path);
 	lower_dentry = lower_path.dentry;
