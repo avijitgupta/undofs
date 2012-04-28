@@ -581,18 +581,18 @@ static int wrapfs_unlink(struct inode *dir, struct dentry *dentry)
 		goto free_buf;
 	}
 	memset(path_original, 0, PAGE_SIZE);
-        create_path_from_dentry(dentry, path_original, &position);
+/*      create_path_from_dentry(dentry, path_original, &position);
         printk(KERN_INFO "Original Path %s", path_original);
         len_orig_path = strlen(path_original); // +1 for terminating null
 	printk("Dentry of file to be deleted %s", dentry->d_name.name);
-
-//	p_o = dentry_path_raw(dentry, buf, PAGE_SIZE);
+*/
+	p_o = dentry_path_raw(dentry, buf, PAGE_SIZE);
 	//kfree(buf);
 //	create_path_from_dentry(dentry, path_original, int *pos)
 
-//	strcpy(path_original, p_o);	
+	strcpy(path_original, p_o);	
 
-/*	len_orig_path = strlen(path_original); // +1 for terminating null
+	len_orig_path = strlen(path_original); // +1 for terminating null
 	if(path_original[len_orig_path-1]!='/')
 	{
 		path_original[len_orig_path] = '/';	
@@ -600,7 +600,7 @@ static int wrapfs_unlink(struct inode *dir, struct dentry *dentry)
 		path_original[len_orig_path] = 0; // Terminating Null
 	}
 
-*/
+
 	/*TODO: Handle 4096 length  path*/
 	printk(KERN_INFO "Original Path %s", path_original);
 	// Original Path has a terminal Slash
@@ -723,7 +723,7 @@ static int wrapfs_unlink(struct inode *dir, struct dentry *dentry)
 			orig_temp_dentry =  d_alloc(orig_parent_dentry, &temp_qstr);
 			wrapfs_lookup(orig_parent_dentry->d_inode, orig_temp_dentry, &nd);
 
-				temp_imode = orig_temp_dentry->d_inode->i_mode;		
+			temp_imode = orig_temp_dentry->d_inode->i_mode;		
 
 			/// TODO: We need i_mode of original directory, and need to use umask()
 	
@@ -1526,13 +1526,13 @@ static int wrapfs_rmdir(struct inode *dir, struct dentry *dentry)
 	}
 	
 	memset(path_original, 0, PAGE_SIZE);
-	create_path_from_dentry(dentry, path_original, &position);
+/*	create_path_from_dentry(dentry, path_original, &position);
         printk(KERN_INFO "Original Path %s", path_original);
         len_orig_path = strlen(path_original); // +1 for terminating null
 	printk("Dentry of file to be deleted %s", dentry->d_name.name);
+*/
 
-
-	/*p_o = dentry_path_raw(dentry, buf, PAGE_SIZE);
+	p_o = dentry_path_raw(dentry, buf, PAGE_SIZE);
 	//kfree(buf);
 
 	strcpy(path_original, p_o);	
@@ -1544,7 +1544,7 @@ static int wrapfs_rmdir(struct inode *dir, struct dentry *dentry)
 		len_orig_path++;
 		path_original[len_orig_path] = 0; // Terminating Null
 	}
-	*/
+	
 
 
 	i=1;
