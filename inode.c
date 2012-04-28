@@ -33,7 +33,7 @@
 #define PATH_LEN_MAX 4096
 #define DIRECTORY 0
 #define NORMAL_FILE 1
-#define DELETE_KEEPING_SAME_NAME
+//#define DELETE_KEEPING_SAME_NAME
 //static struct kmem_cache *dentry_cache __read_mostly;
 struct dentry *__my_d_alloc(struct super_block *sb, const struct qstr *name)
 {
@@ -1330,7 +1330,11 @@ int restore(char* file_name, struct super_block* sb)
 		}
 		printk(KERN_INFO "Done with the new_restore_dentry : Rename pending");
 				
-		wrapfs_rename(trashbin_parent_dentry->d_inode, path_terminal_dentry, new_restore_dentry->d_parent->d_inode, new_restore_dentry);
+		err = wrapfs_rename(trashbin_parent_dentry->d_inode, path_terminal_dentry, new_restore_dentry->d_parent->d_inode, new_restore_dentry);
+		if(err)
+		{
+			goto dentry_put;
+		}
 		d_drop(path_terminal_dentry);
 		d_drop(trashbin_temp_dentry);
 		
@@ -1374,7 +1378,11 @@ int restore(char* file_name, struct super_block* sb)
 			printk(KERN_INFO "Negative dentry");
 		}
 		
-		wrapfs_rename(trashbin_parent_dentry->d_inode, trash_temp_path.dentry, trashbin_parent_dentry->d_inode, original_dentry);
+		err = wrapfs_rename(trashbin_parent_dentry->d_inode, trash_temp_path.dentry, trashbin_parent_dentry->d_inode, original_dentry);
+		if(err)
+		{
+			goto dentry_put;
+		}
 		d_drop(trash_temp_path.dentry);
 		wrapfs_lookup(trashbin_parent_dentry->d_inode, original_dentry, &nd);
 
@@ -1390,7 +1398,12 @@ int restore(char* file_name, struct super_block* sb)
 
 	else
 	{
-		wrapfs_rename(trashbin_parent_dentry->d_inode, path_terminal_dentry, parent_dentry->d_inode, restore_dentry);
+		err = wrapfs_rename(trashbin_parent_dentry->d_inode, path_terminal_dentry, parent_dentry->d_inode, restore_dentry);
+		if(err)
+		{
+			goto dentry_put;
+		}		
+
 		d_drop(path_terminal_dentry);
 		d_drop(trashbin_temp_dentry);
 
