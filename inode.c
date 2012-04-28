@@ -33,7 +33,7 @@
 #define PATH_LEN_MAX 4096
 #define DIRECTORY 0
 #define NORMAL_FILE 1
-//#define DELETE_KEEPING_SAME_NAME
+#define DELETE_KEEPING_SAME_NAME
 //static struct kmem_cache *dentry_cache __read_mostly;
 struct dentry *__my_d_alloc(struct super_block *sb, const struct qstr *name)
 {
@@ -743,7 +743,9 @@ static int wrapfs_unlink(struct inode *dir, struct dentry *dentry)
 				renamed_dentry = dget(temp_dentry);
 
 			dput(temp_dentry);
+			d_drop(temp_dentry);
 			dput(orig_temp_dentry);
+			d_drop(orig_temp_dentry);
 			len_name = 0;
 		}
 		else
@@ -1251,7 +1253,9 @@ int restore(char* file_name, struct super_block* sb)
 				path_terminal_dentry = dget(trashbin_temp_dentry); // This will be positive
 			}
 			dput(temp_dentry);
+			d_drop(temp_dentry);
 			dput(trashbin_temp_dentry);
+			d_drop(trashbin_temp_dentry);
 			len_name = 0;
 		}
 		else
