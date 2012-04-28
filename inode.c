@@ -456,6 +456,7 @@ static int wrapfs_normal_unlink(struct inode *dir, struct dentry *dentry)
 		  wrapfs_lower_inode(dentry->d_inode)->i_nlink);
 	dentry->d_inode->i_ctime = dir->i_ctime;
 	d_drop(dentry); /* this is needed, else LTP fails (VFS won't do it) */
+
 out:
 	mnt_drop_write(lower_path.mnt);
 out_unlock:
@@ -500,6 +501,28 @@ void my_itoa(char *str, long int num){
         }
 }
 
+static int _wrapfs_unlink(struct inode *dir, struct dentry *dentry)
+{
+	struct dentry *parent_dentry;
+	struct dentry* temp_dentry;
+	struct nameidata nd;
+	nd.flags = 0;
+	struct qstr temp_qstr;
+	parent_dentry = dentry->d_parent->d_parent;
+	char name[100];
+	strcpy(name, dentry->d_iname);
+	fetch_qstr(&temp_qstr, name);
+        temp_dentry = d_alloc(parent_dentry, &temp_qstr);
+        wrapfs_lookup(parent_dentry->d_inode, temp_dentry, &nd);
+	wrapfs_rename(dir, dentry, parent_dentry->d_inode, temp_dentry);
+	d_drop(dentry);	
+        
+
+
+//	dput(parent_dentry);
+	return 0;
+}
+
 static int wrapfs_unlink(struct inode *dir, struct dentry *dentry)
 {
 	int err=0;
@@ -541,7 +564,8 @@ static int wrapfs_unlink(struct inode *dir, struct dentry *dentry)
 	char timestamp_string[15];
 	int flag =0;
 	struct dentry* trash_dentry = NULL;
-
+	struct path lower_path;
+	int position =0;
 //	char temp_trash[PAGE_SIZE];
 	buf  = kmalloc(PAGE_SIZE* sizeof(char), GFP_KERNEL);
 	if(!buf)
@@ -557,12 +581,18 @@ static int wrapfs_unlink(struct inode *dir, struct dentry *dentry)
 		goto free_buf;
 	}
 	memset(path_original, 0, PAGE_SIZE);
-	p_o = dentry_path_raw(dentry, buf, PAGE_SIZE);
+        create_path_from_dentry(dentry, path_original, &position);
+        printk(KERN_INFO "Original Path %s", path_original);
+        len_orig_path = strlen(path_original); // +1 for terminating null
+	printk("Dentry of file to be deleted %s", dentry->d_name.name);
+
+//	p_o = dentry_path_raw(dentry, buf, PAGE_SIZE);
 	//kfree(buf);
+//	create_path_from_dentry(dentry, path_original, int *pos)
 
-	strcpy(path_original, p_o);	
+//	strcpy(path_original, p_o);	
 
-	len_orig_path = strlen(path_original); // +1 for terminating null
+/*	len_orig_path = strlen(path_original); // +1 for terminating null
 	if(path_original[len_orig_path-1]!='/')
 	{
 		path_original[len_orig_path] = '/';	
@@ -570,7 +600,7 @@ static int wrapfs_unlink(struct inode *dir, struct dentry *dentry)
 		path_original[len_orig_path] = 0; // Terminating Null
 	}
 
-
+*/
 	/*TODO: Handle 4096 length  path*/
 	printk(KERN_INFO "Original Path %s", path_original);
 	// Original Path has a terminal Slash
@@ -693,7 +723,6 @@ static int wrapfs_unlink(struct inode *dir, struct dentry *dentry)
 			orig_temp_dentry =  d_alloc(orig_parent_dentry, &temp_qstr);
 			wrapfs_lookup(orig_parent_dentry->d_inode, orig_temp_dentry, &nd);
 
-
 				temp_imode = orig_temp_dentry->d_inode->i_mode;		
 
 			/// TODO: We need i_mode of original directory, and need to use umask()
@@ -767,11 +796,23 @@ static int wrapfs_unlink(struct inode *dir, struct dentry *dentry)
 			goto top_out;
 		}
 
-		wrapfs_rename(dentry->d_parent->d_inode, dentry, parent_dentry->d_inode, trash_dentry);
+		wrapfs_rename(dir, dentry, parent_dentry->d_inode, trash_dentry);
 
 	}
 
-	else wrapfs_rename(dentry->d_parent->d_inode, dentry, parent_dentry->d_inode, renamed_dentry);
+	else wrapfs_rename(dir, dentry, parent_dentry->d_inode, renamed_dentry);
+	printk(KERN_INFO "Dentry ref cnt %d", dentry->d_count);	
+/*	
+	wrapfs_get_lower_path(dentry, &lower_path);
+//	d_drop(lower_path.dentry);
+	 if ( !(dentry->d_flags & DCACHE_NFSFS_RENAMED)) {
+                fsnotify_link_count(lower_path.dentry->d_inode);
+                d_delete(lower_path.dentry);
+        	printk(KERN_INFO "Im here ");
+	}
+*/
+
+	printk(KERN_INFO "renamed Dentry ref cnt %d", renamed_dentry->d_count);	
 
 top_out:
 	if(flag)
@@ -779,6 +820,7 @@ top_out:
 		dput(trash_dentry);
 	}
 	printk(KERN_INFO "Before renamed_dentry");
+//	path_put(&lower_path);
 	dput(renamed_dentry);
 	printk(KERN_INFO "Before trashbin_dentry");
 	dput(trashbin_dentry);
@@ -802,6 +844,9 @@ free_buf:
 	if(buf)
 		kfree(buf);
 out:
+	
+	d_drop(dentry);
+	d_drop(orig_temp_dentry); 
 	printk(KERN_INFO "BEforee final exit");
 	return err;
 }
@@ -1263,8 +1308,11 @@ int restore(char* file_name, struct super_block* sb)
 			err = -EEXIST;
 			goto dentry_put;
 		}
-
+		// mode hash appended name to trash
 		wrapfs_rename(parent_dentry->d_inode, restore_dentry, trashbin_parent_dentry->d_inode, trash_dentry);
+		
+		d_drop(restore_dentry);
+		d_drop(temp_dentry);
 		
 		fetch_qstr(&new_restore_qstr, new_restore_name);
 		new_restore_dentry = d_alloc(parent_dentry, &new_restore_qstr);
@@ -1276,6 +1324,9 @@ int restore(char* file_name, struct super_block* sb)
 		printk(KERN_INFO "Done with the new_restore_dentry : Rename pending");
 				
 		wrapfs_rename(trashbin_parent_dentry->d_inode, path_terminal_dentry, new_restore_dentry->d_parent->d_inode, new_restore_dentry);
+		d_drop(path_terminal_dentry);
+		d_drop(trashbin_temp_dentry);
+		
 		nd.flags = file_type? 0: LOOKUP_DIRECTORY;
 		wrapfs_lookup(new_restore_dentry->d_parent->d_inode, new_restore_dentry, &nd);
 //		 err = vfs_path_lookup(new_restore_dentry, current->fs->pwd.mnt , new_restore_name, nd.flags , &trash_temp_path);
@@ -1317,6 +1368,7 @@ int restore(char* file_name, struct super_block* sb)
 		}
 		
 		wrapfs_rename(trashbin_parent_dentry->d_inode, trash_temp_path.dentry, trashbin_parent_dentry->d_inode, original_dentry);
+		d_drop(trash_temp_path.dentry);
 		wrapfs_lookup(trashbin_parent_dentry->d_inode, original_dentry, &nd);
 
 		if(original_dentry->d_inode)
@@ -1332,8 +1384,13 @@ int restore(char* file_name, struct super_block* sb)
 	else
 	{
 		wrapfs_rename(trashbin_parent_dentry->d_inode, path_terminal_dentry, parent_dentry->d_inode, restore_dentry);
+		d_drop(path_terminal_dentry);
+		d_drop(trashbin_temp_dentry);
+
+
 		nd.flags = file_type? 0: LOOKUP_DIRECTORY; 
 		wrapfs_lookup(parent_dentry->d_inode, restore_dentry, &nd);
+	
 	}
 
 #ifdef DELETE_KEEPING_SAME_NAME
@@ -1442,7 +1499,7 @@ static int wrapfs_rmdir(struct inode *dir, struct dentry *dentry)
 	struct dentry* parent_dentry;
 	struct dentry* orig_temp_dentry;
 	struct dentry* orig_parent_dentry;
-	int temp_imode; 
+	int temp_imode, position=0; 
 	struct qstr trash_qstr;
 //	char temp_trash[PAGE_SIZE];
 	buf  = kmalloc(PAGE_SIZE* sizeof(char), GFP_KERNEL);
@@ -1460,7 +1517,13 @@ static int wrapfs_rmdir(struct inode *dir, struct dentry *dentry)
 	}
 	
 	memset(path_original, 0, PAGE_SIZE);
-	p_o = dentry_path_raw(dentry, buf, PAGE_SIZE);
+	create_path_from_dentry(dentry, path_original, &position);
+        printk(KERN_INFO "Original Path %s", path_original);
+        len_orig_path = strlen(path_original); // +1 for terminating null
+	printk("Dentry of file to be deleted %s", dentry->d_name.name);
+
+
+	/*p_o = dentry_path_raw(dentry, buf, PAGE_SIZE);
 	//kfree(buf);
 
 	strcpy(path_original, p_o);	
@@ -1472,6 +1535,9 @@ static int wrapfs_rmdir(struct inode *dir, struct dentry *dentry)
 		len_orig_path++;
 		path_original[len_orig_path] = 0; // Terminating Null
 	}
+	*/
+
+
 	i=1;
 	while(i < strlen(path_original) && path_original[i]!='/')
 	{
@@ -1608,10 +1674,9 @@ static int wrapfs_rmdir(struct inode *dir, struct dentry *dentry)
 		else
 			temp_name[len_name++] = path_original[pos++];
 	}
-
+	
 	err = wrapfs_normal_rmdir(dir, dentry);
-
-
+//	d_drop(dentry);
 
 put_dentries:
 	dput(trashbin_dentry);
@@ -1630,6 +1695,9 @@ free_buf:
 	if(buf)
 		kfree(buf);
 out_end:
+	d_drop(orig_temp_dentry);
+	d_drop(orig_parent_dentry);
+	d_drop(dentry);
 	return err;
 
 }
