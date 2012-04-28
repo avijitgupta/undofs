@@ -834,10 +834,8 @@ top_out:
 	dput(orig_parent_dentry);
 	d_drop(dentry);
 	d_drop(orig_temp_dentry); 
-	d_drop(parent_dentry);
 	d_drop(renamed_dentry);
 	d_drop(user_trashbin_dentry);	
-	d_drop(orig_parent_dentry);	
 	if(user_trashbin_string)
 	{
 		
