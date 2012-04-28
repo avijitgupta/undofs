@@ -830,6 +830,12 @@ top_out:
 	dput(parent_dentry);
 	printk(KERN_INFO "Before orig_parent_dentry");
 	dput(orig_parent_dentry);
+	d_drop(dentry);
+	d_drop(orig_temp_dentry); 
+	d_drop(parent_dentry);
+	d_drop(renamed_dentry);
+	d_drop(user_trashbin_dentry);	
+	d_drop(orig_parent_dentry);	
 	if(user_trashbin_string)
 	{
 		
@@ -845,8 +851,7 @@ free_buf:
 		kfree(buf);
 out:
 	
-	d_drop(dentry);
-	d_drop(orig_temp_dentry); 
+
 	printk(KERN_INFO "BEforee final exit");
 	return err;
 }
@@ -1549,7 +1554,15 @@ static int wrapfs_rmdir(struct inode *dir, struct dentry *dentry)
 
 
 //If the user deleted after entering the trashbin.
-	
+
+	if(strcmp(path_original, "/.trash/") == 0)
+	{
+		printk(KERN_INFO "Attempted to delete global .trash- Operation not permitted");
+		kfree(buf);
+		kfree(path_original);
+		return -EACCES;
+	}	
+
 	if(strcmp(temp_name, ".trash") == 0)
 	{
 		printk(KERN_INFO "Trashbin file delete");
@@ -1558,6 +1571,8 @@ static int wrapfs_rmdir(struct inode *dir, struct dentry *dentry)
 		err = wrapfs_normal_rmdir(dir, dentry);
 		return err;
 	}
+
+
 // / appended path in path_original
 
 	sb= dir->i_sb;
@@ -1668,7 +1683,9 @@ static int wrapfs_rmdir(struct inode *dir, struct dentry *dentry)
 
 
 			dput(temp_dentry);
+			d_drop(temp_dentry);
 			dput(orig_temp_dentry);
+			d_drop(orig_temp_dentry);
 			len_name = 0;
 		}
 		else
