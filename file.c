@@ -106,12 +106,6 @@ static long wrapfs_unlocked_ioctl(struct file *file, unsigned int cmd,
 			printk(KERN_INFO "File to be restored %s", user_data); 
 			err = restore(user_data, sb);
 			break;
-			
-	case IODELETE:
-			printk(KERN_INFO "Delete Ioctl received!\n");
-			printk(KERN_INFO "File to be deleted %s", user_data);
-			err = trashbin_file_delete(user_data, sb);
-			break;
 
 	default:	lower_file = wrapfs_lower_file(file);
 
