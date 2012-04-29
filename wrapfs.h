@@ -82,14 +82,6 @@ extern int wrapfs_interpose(struct dentry *dentry, struct super_block *sb,
 extern struct dentry *wrapfs_lookup(struct inode *dir, struct dentry *dentry,
                              struct nameidata *nd);
 extern int wrapfs_mkdir(struct inode *dir, struct dentry *dentry, int mode);
-extern ssize_t wrapfs_getxattr_lower(struct dentry *lower_dentry, const char *name,
-                        void *value, size_t size);
-extern ssize_t wrapfs_getxattr(struct dentry *dentry, const char *name, void *value,
-                         size_t size);
-extern int wrapfs_setxattr(struct dentry *dentry, const char *name,
-                     const void *value, size_t size, int flags);
-extern int wrapfs_removexattr(struct dentry *dentry, const char *name);
-extern ssize_t wrapfs_listxattr(struct dentry *dentry, char *list, size_t size);
 extern int wrapfs_d_revalidate(struct dentry *dentry, struct nameidata *nd);
 extern int restore(char* file_name, struct super_block* sb);
 extern int restore_policy;
