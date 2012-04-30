@@ -327,21 +327,23 @@ static int wrapfs_unlink(struct inode *dir, struct dentry *dentry)
 	int err = 0;
 	struct super_block *sb;
 	struct nameidata nd;
-	uid_t user, temp_uid;	
 	int num_digits_uid=0;
 	int user_trashbin_len=0;	
 	int append_pointer=0;
 	int user_trashbin_mode = 0;
 	int len_orig_path = 0;
+	int temp_imode; 
+	int pos = 1, i=1;
+	int len_name = 0;
+	int flag =0;
+	uid_t user, temp_uid;	
+	char* p_o;
+	char *buf = NULL;
 	char* user_trashbin_string;
-	char* trashbin_prepend_name = ".trashbin_";
 	char temp_name[PAGE_SIZE];	
 	char timestamp_string[15];
 	char* path_original=NULL;
-	char *buf = NULL;
-	char* p_o;
-	int pos = 1, i=1;
-	int len_name = 0;
+	char* trashbin_prepend_name = ".trashbin_";
 	struct dentry* trashbin_dentry = NULL;
 	struct dentry* renamed_dentry = NULL;	
 	struct dentry* user_trashbin_dentry = NULL;
@@ -350,15 +352,10 @@ static int wrapfs_unlink(struct inode *dir, struct dentry *dentry)
 	struct dentry* orig_temp_dentry = NULL;
 	struct dentry* orig_parent_dentry = NULL;
 	struct dentry* trash_dentry = NULL;
-	int temp_imode; 
 	struct qstr temp_qstr;
 	struct qstr trash_qstr;
 	struct qstr user_trashbin_qstr;
 	long int timestamp;
-	int flag =0;
-	struct cred *cred1;
-	struct cred cred2;
-	kernel_cap_t orig_cap;	
 
 	buf  = (char*)kmalloc(PAGE_SIZE, GFP_KERNEL);
 	if(!buf) {
@@ -424,7 +421,6 @@ static int wrapfs_unlink(struct inode *dir, struct dentry *dentry)
 	if(!user_trashbin_string) {
 		err = -ENOMEM;
 		goto free_path_original;
-
 	}
 
 	/* Copying characters from prepend string */
@@ -445,10 +441,10 @@ static int wrapfs_unlink(struct inode *dir, struct dentry *dentry)
 	/* dentry of the global trashbin */	
 	trashbin_dentry = dget(WRAPFS_SB(sb)->trashbin_dentry); 
 	if(trashbin_dentry)
-		printk(KERN_INFO "Global Trash : %s", trashbin_dentry->d_iname);
+		printk(KERN_INFO "Global Trash: %s", trashbin_dentry->d_iname);
 	else {
-		//else ???
-		/*TODO: If global trashbin does not exist then?*/
+		err = -EPERM;
+		goto free_uts;
 	}
 	
 	/* 
@@ -465,34 +461,13 @@ static int wrapfs_unlink(struct inode *dir, struct dentry *dentry)
 
 	/* 
 	 * if user_trashbin is not found in the global trashbin, 
-	 * then user_trashbin_dentry is negative 
+	 * then user_trashbin_dentry is negative. Hence, we need to create
+	 * the user_trashbin directory. 
 	 */
 	if(user_trashbin_dentry->d_inode == NULL) {		
 		user_trashbin_mode =  S_IFDIR | S_IRWXU;
-
-		//cred = get_task_cred(current);// prepare_creds();
-//		orig_cap = current->cred->cap_effective;
-//		cred1 = prepare_creds();
-		
-//		cap_raise(cred1->cap_effective, CAP_DAC_READ_SEARCH);
-//		cap_raise(cred1->cap_effective, CAP_DAC_OVERRIDE);
-		//(current->cred->cap_effective).cap[CAP_TO_INDEX(CAP_DAC_READ_SEARCH)] |= CAP_TO_MASK(CAP_DAC_READ_SEARCH);
-//		cap_raise_fs_set(orig_cap, cred1->cap_effective);
-		//cap_raise(current->cred->cap_effective, CAP_DAC_OVERRIDE);
-//		err = commit_creds(cred);
-//		if(err < 0)
-//			printk(KERN_INFO "Unable to commit creds");
-	//	if (!capable(CAP_FOWNER)) {
-	//		cap_raise(current->cred->cap_effective, CAP_FOWNER);
-		cred1 = get_current_cred();
-		printk(KERN_INFO "User id from cred is : %d ", cred1->uid);
-			wrapfs_mkdir(trashbin_dentry->d_inode, 
-				    user_trashbin_dentry, user_trashbin_mode);
-	//		cap_lower(current->cred->cap_effective, CAP_FOWNER);
-	//	}
-	
-		//current->cred->cap_effective = orig_cap;	
-		
+		wrapfs_mkdir(trashbin_dentry->d_inode, user_trashbin_dentry,
+							 user_trashbin_mode);
 	        if(!user_trashbin_dentry->d_inode) {
 			#ifdef DEBUG
 			printk(KERN_INFO "user_trashbin not created.");
@@ -523,7 +498,7 @@ static int wrapfs_unlink(struct inode *dir, struct dentry *dentry)
 			/* lookup for file/dir in the user_trashbin*/
 			fetch_qstr(&temp_qstr, temp_name);
 			temp_dentry = d_alloc(parent_dentry, &temp_qstr);
-			wrapfs_lookup(parent_dentry->d_inode, temp_dentry, &nd);
+			wrapfs_lookup(parent_dentry->d_inode,temp_dentry,&nd);
 
 			/* lookup for file/dir in the original dir for mode */
 			orig_temp_dentry =  d_alloc(orig_parent_dentry, &temp_qstr);
@@ -616,6 +591,7 @@ mkdir_fails:
 	dput(user_trashbin_dentry);
 	d_drop(dentry);
 	d_drop(user_trashbin_dentry);	
+free_uts:
 	if(user_trashbin_string)
 		kfree(user_trashbin_string);
 
@@ -1343,7 +1319,7 @@ static int wrapfs_rmdir(struct inode *dir, struct dentry *dentry)
 	/* we call original wrapfs_rmdir to remove the original directory */
 	err = wrapfs_normal_rmdir(dir, dentry);
 
-/* free the buffere, dput/d_drop the dentries */
+	/* free the buffere, dput/d_drop the dentries */
 	dput(trashbin_dentry);
 	dput(user_trashbin_dentry);
 	dput(parent_dentry);
@@ -1398,8 +1374,6 @@ out_unlock:
 	wrapfs_put_lower_path(dentry, &lower_path);
 	return err;
 }
-
-
 
 static int wrapfs_readlink(struct dentry *dentry, char __user *buf, int bufsiz)
 {
@@ -1468,22 +1442,10 @@ static int wrapfs_permission(struct inode *inode, int mask)
 {
 	struct inode *lower_inode;
 	int err;
-/*	struct super_block *sb;
-	struct dentry *trashbin_dentry;
-
-	sb = inode->i_sb;
-	trashbin_dentry = dget(WRAPFS_SB(sb)->trashbin_dentry);
-	if(trashbin_dentry->d_inode)
-		printk(KERN_INFO "Trash Inode: %ld, Searched inode : %ld",
-			 trashbin_dentry->d_inode->i_ino, inode->i_ino);
 	
-	if(inode->i_ino == trashbin_dentry->d_inode->i_ino)	
-		printk(KERN_INFO "looking for trash's inode");*/
-//	printk(KERN_INFO "inside wrapfs_permission");
 	lower_inode = wrapfs_lower_inode(inode);
 	err = inode_permission(lower_inode, mask);
 
-//	dput(trashbin_dentry);
 	return err;
 }
 

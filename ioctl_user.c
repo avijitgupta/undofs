@@ -111,6 +111,7 @@ int main(int argc, char **argv)
 		rval = ioctl(fd, IORESTORE, file);
 		if(rval < 0){
 			errno = rval;
+			perror("IOCTL ERROR");
 			printf("ioctl error : %d\n", errno);
 		}
         }
