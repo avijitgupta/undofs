@@ -357,7 +357,8 @@ static int wrapfs_unlink(struct inode *dir, struct dentry *dentry)
 	struct qstr trash_qstr;
 	struct qstr user_trashbin_qstr;
 	long int timestamp;
-
+	struct inode* lower_inode;
+	struct path final_path;
 	buf  = (char*)kmalloc(PAGE_SIZE, GFP_KERNEL);
 	if(!buf) {
 		err = -ENOMEM;
@@ -539,6 +540,13 @@ static int wrapfs_unlink(struct inode *dir, struct dentry *dentry)
 						d_drop(orig_temp_dentry); 
 						goto dput_parents;
 					}
+					else
+					{
+						/* Overriding the permission settings done by umask(2)*/
+						temp_dentry->d_inode->i_mode = temp_imode;
+						lower_inode = wrapfs_lower_inode(temp_dentry->d_inode);
+						lower_inode->i_mode = temp_imode;		
+					}
 				}
 				/*update trashbin parent and original parent */
 				dput(parent_dentry);
@@ -603,15 +611,34 @@ static int wrapfs_unlink(struct inode *dir, struct dentry *dentry)
 		}
 
 		err = wrapfs_rename(dir, dentry, parent_dentry->d_inode, trash_dentry);
+		if(err < 0)
+		{
+			goto top_out;
+		}		
+
+		err = vfs_path_lookup(parent_dentry, current->fs->pwd.mnt, temp_name,0, &final_path);
+		if(err < 0)
+		{
+			goto top_out;
+		}
+			
+	
 	}
 	else 
+	{	
 		err = wrapfs_rename(dir, dentry, parent_dentry->d_inode, renamed_dentry);
+		if(err<0)
+			goto top_out;
+		err = vfs_path_lookup(parent_dentry, current->fs->pwd.mnt, dentry->d_iname,0, &final_path);
+		if(err < 0)
+		{
+			goto top_out;
+		}
 
-	if(err<0)
-		goto top_out;
-
+	}
 /* dput and d_drop dentries, release buffers */
-d_drop(dentry);
+	d_drop(dentry);
+	path_put(&final_path);
 
 top_out:
 	if(flag)
@@ -719,7 +746,7 @@ int restore(char* file_name, struct super_block* sb)
 	struct dentry* trashbin_temp_dentry = NULL;
 	struct dentry* restore_dentry=NULL;
 	struct dentry* new_restore_dentry = NULL;
-
+	struct inode* lower_inode;
 	/* retrieve user credentials and restore policy */
 	user = current->real_cred->uid;
 	temp_uid = user;
@@ -903,7 +930,13 @@ int restore(char* file_name, struct super_block* sb)
 					d_drop(trashbin_temp_dentry); 
 					goto drop_parents;
 				}
-				
+				else
+				{
+					/* Overriding the permission settings done by umask(2)*/
+					temp_dentry->d_inode->i_mode = temp_imode;
+					lower_inode = wrapfs_lower_inode(temp_dentry->d_inode);
+					lower_inode->i_mode = temp_imode;		
+				}
 				}
 				/* as loop goes, so dput and reassign them */		
 				dput(parent_dentry);
@@ -1219,6 +1252,7 @@ static int wrapfs_rmdir(struct inode *dir, struct dentry *dentry)
 	struct dentry* err_dentry;	
 	struct qstr user_trashbin_qstr;
 	struct qstr temp_qstr;
+	struct inode* lower_inode;
 	
 	buf  = (char*)kmalloc(PAGE_SIZE, GFP_KERNEL);
 	if(!buf) {
@@ -1398,6 +1432,13 @@ static int wrapfs_rmdir(struct inode *dir, struct dentry *dentry)
 					d_drop(orig_temp_dentry); 
 					goto dput_parents;
 				}	
+				else
+				{
+					/* Overriding the permission settings done by umask(2)*/
+					temp_dentry->d_inode->i_mode = temp_imode;
+					lower_inode = wrapfs_lower_inode(temp_dentry->d_inode);
+					lower_inode->i_mode = temp_imode;		
+				}
 		
 			}
 			/* As loop goes, we need to drop/dput the dentries */					
@@ -1637,6 +1678,7 @@ const struct inode_operations wrapfs_symlink_iops = {
 	.permission	= wrapfs_permission,
 	.follow_link	= wrapfs_follow_link,
 	.put_link	= wrapfs_put_link,
+	.setattr	= wrapfs_setattr
 };
 
 const struct inode_operations wrapfs_dir_iops = {
@@ -1650,9 +1692,10 @@ const struct inode_operations wrapfs_dir_iops = {
 	.mknod		= wrapfs_mknod,
 	.rename		= wrapfs_rename,
 	.permission	= wrapfs_permission,
-
+	.setattr	= wrapfs_setattr
 };
 
 const struct inode_operations wrapfs_main_iops = {
 	.permission	= wrapfs_permission,
+	.setattr	= wrapfs_setattr
 };
