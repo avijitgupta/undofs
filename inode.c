@@ -135,7 +135,6 @@ static int wrapfs_rename(struct inode *old_dir, struct dentry *old_dentry,
 	struct path lower_old_path, lower_new_path;
 	struct nameidata nd;
 	nd.flags = 0;
-	printk(KERN_INFO "Entry");
 	
 	wrapfs_get_lower_path(old_dentry, &lower_old_path);
 	wrapfs_get_lower_path(new_dentry, &lower_new_path);
@@ -961,10 +960,12 @@ int restore(char* file_name, struct super_block* sb)
 	}
 
 	/* checking if the file to be restored exists in the original path */	
+	#ifdef DEBUG
 	if(restore_dentry && !restore_dentry->d_inode)
 		printk(KERN_INFO "RESTORE: New Negative Dentry %s", 
 						restore_dentry->d_iname);
 
+	#endif
 	/* 
 	 * if file/dir exists in the original path, then we check user's
 	 * restore policy specified at the mount time.
@@ -1065,7 +1066,7 @@ int restore(char* file_name, struct super_block* sb)
 				
 			/* move new file from trashbin to the original path */
 			err = wrapfs_rename(trashbin_parent_dentry->d_inode, 
-			path_terminal_dentry, new_restore_dentry->d_parent->d_inode, new_restore_dentry);
+					path_terminal_dentry, new_restore_dentry->d_parent->d_inode, new_restore_dentry);
 			if(err < 0) {	
 				goto flag_put;
 			}
@@ -1291,14 +1292,18 @@ static int wrapfs_rmdir(struct inode *dir, struct dentry *dentry)
 	 * Hence, checking for .trash/ in the pathname 
 	 */
 	if(strcmp(path_original, "/.trash/") == 0) {
+	#ifdef DEBUG
 		printk(KERN_INFO "Attempted to delete global \
 				.trash. Operation not permitted");
+	#endif
 		err = -EACCES;
 		goto free_path_original;
 	}	
 
 	if(strcmp(temp_name, ".trash") == 0) {
+	#ifdef DEBUG
 		printk(KERN_INFO "Trashbin file delete");
+	#endif
 		err = wrapfs_normal_rmdir(dir, dentry);
 		goto free_path_original;
 	}

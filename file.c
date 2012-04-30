@@ -102,8 +102,10 @@ static long wrapfs_unlocked_ioctl(struct file *file, unsigned int cmd,
 	switch(cmd)
 	{
 	case IORESTORE: 
+			#ifdef DEBUG
 			printk(KERN_INFO "Restore Ioctl received!\n");
 			printk(KERN_INFO "File to be restored %s", user_data); 
+			#endif
 			err = restore(user_data, sb);
 			break;
 

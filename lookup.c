@@ -245,11 +245,9 @@ static struct dentry *__wrapfs_lookup(struct dentry *dentry, int flags,
 	lower_dentry = d_lookup(lower_dir_dentry, &this);
 	if (lower_dentry)
 	{	
-	printk(KERN_INFO "Lower dentry found");
 	goto setup_lower;
 	}
 	
-	printk(KERN_INFO "allocating a new negative dentry");
 
 	lower_dentry = d_alloc(lower_dir_dentry, &this);
 	if (!lower_dentry) {

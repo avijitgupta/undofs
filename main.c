@@ -189,7 +189,9 @@ struct dentry *wrapfs_mount(struct file_system_type *fs_type, int flags,
 
 void my_generic_shutdown_super(struct super_block *sb)
 {
+	#ifdef DEBUG
 	printk(KERN_INFO "Dentry Reference Count %d\n",get_trashbin_dentry(sb)->d_count);
+	#endif
 	dput(get_trashbin_dentry(sb));
 	generic_shutdown_super(sb);
 }
