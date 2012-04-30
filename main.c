@@ -29,16 +29,10 @@ static int wrapfs_read_super(struct super_block *sb, void *raw_data, int silent)
 	struct qstr trashbin_qstr;
 	unsigned int trashbin_mode = 0;
 	struct inode* lower_inode;
-/* NEW*/
 	struct dentry *trashbin_dentry = NULL;
 	struct dentry *dentry_root=NULL;
-//	struct dentry *lower_dentry_root = NULL;
         const char* trash = ".trash";
-//        struct path lp;
-	//struct vfsmount *top_vfsmount;
-/* End new*/
-
-
+	struct dentry* err_dentry;
 	if (!dev_name) {
 		printk(KERN_ERR
 		       "wrapfs: read_super: missing dev_name argument\n");
@@ -113,34 +107,22 @@ static int wrapfs_read_super(struct super_block *sb, void *raw_data, int silent)
 		printk(KERN_INFO
 		       "wrapfs: mounted on top of %s type %s\n",
 		       dev_name, lower_sb->s_type->name);
-//	sb->s_d_op = &wrapfs_dops; //Added
-
-	/* no longer needed: free_dentry_private_data(sb->s_root); */
-
-/* Putting the trashbin into private pointer*/
-
-// 1 reference count for dentry_root
 
 	dentry_root = dget(sb->s_root);
-
-        //wrapfs_get_lower_path(dentry_root, &lp);
-        //lower_dentry_root = lp.dentry;
-//	top_vfsmount = current->fs->pwd.mnt;
-//Path obtained contains the dentry of trash.
-//        error = vfs_path_lookup(dentry_root, top_vfsmount , trash, LOOKUP_DIRECTORY , &path_obtained);
-        trashbin_qstr.len = strlen(trash);
+        
+	trashbin_qstr.len = strlen(trash);
         trashbin_qstr.name = trash;
         trashbin_qstr.hash = full_name_hash(trash,strlen(trash));
-
 	trashbin_dentry =  d_alloc(dentry_root, &trashbin_qstr);
 	nd.flags = LOOKUP_DIRECTORY;
-	wrapfs_lookup(dentry_root->d_inode, trashbin_dentry, &nd);
 	
-	/*if(error && error!=-ENOENT)
+	err_dentry = wrapfs_lookup(dentry_root->d_inode, trashbin_dentry, &nd);
+	
+	err =PTR_ERR(err_dentry);
+	if(IS_ERR(err_dentry) && err!=-ENOENT)
 	{
 		goto out_freeroot;
-	}	*/
-// Check what error is returned and modify the code below
+	}	
 
 	if(trashbin_dentry->d_inode==NULL)
 	{
@@ -161,14 +143,13 @@ static int wrapfs_read_super(struct super_block *sb, void *raw_data, int silent)
 	}
 	else 
 	{
+		#ifdef DEBUG
 		printk(KERN_INFO "Trash Existing");
-	 	set_trashbin_dentry(sb, trashbin_dentry);  ///Stuffing into private pointer for dentry
+	 	#endif
+		set_trashbin_dentry(sb, trashbin_dentry);  ///Stuffing into private pointer for dentry
 	}
 	
 
-//      if(error!=0)
-//                printk(KERN_INFO "Some Error %d ENOENT %d ECHILD%d ENOTDIR %d EPERM %d EACCES %d ", error, ENOENT, ECHILD, ENOTDIR, EPERM, EACCES);
-	
 	goto out; /* all is well */
 
 /* Conclusion*/
@@ -196,8 +177,7 @@ struct dentry *wrapfs_mount(struct file_system_type *fs_type, int flags,
 {
 	void *lower_path_name = (void *) dev_name;
 	char* mount_flags = (char*)raw_data;
-	//printk(KERN_INFO "%s", mount_flags);
-	if(mount_flags && strcmp(mount_flags, "delete")==0)
+	if(mount_flags && strcmp(mount_flags, "version")==0)
 		restore_policy = DELETE;		
 		
 	else 

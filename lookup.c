@@ -234,13 +234,14 @@ static struct dentry *__wrapfs_lookup(struct dentry *dentry, int flags,
 	 */
 	if (err && err != -ENOENT)
 		goto out;
+	
+	#ifdef DEBUG
 	printk(KERN_INFO "Before instantiating a new negative dentry");
-
+	#endif
 	/* instatiate a new negative dentry */
 	this.name = name;
 	this.len = strlen(name);
 	this.hash = full_name_hash(this.name, this.len);
-	//printk(KERN_INFO "Received a call to __wrapfs_lookup with child %s and ino %d",lower_dir_dentry->d_iname,lower_dir_dentry->d_inode->i_ino );
 	lower_dentry = d_lookup(lower_dir_dentry, &this);
 	if (lower_dentry)
 	{	
@@ -285,7 +286,6 @@ struct dentry *wrapfs_lookup(struct inode *dir, struct dentry *dentry,
 
 	BUG_ON(!nd);
 	parent = dget_parent(dentry);
-	//printk(KERN_INFO "Received a call to ->lookup with parent %s and ino %d",parent->d_iname,parent->d_inode->i_ino );
 	wrapfs_get_lower_path(parent, &lower_parent_path);
 
 	/* allocate dentry private data.  We free it in ->d_release */
