@@ -747,6 +747,7 @@ int restore(char* file_name, struct super_block* sb)
 	struct dentry* restore_dentry=NULL;
 	struct dentry* new_restore_dentry = NULL;
 	struct inode* lower_inode;
+	struct path final_path;
 	/* retrieve user credentials and restore policy */
 	user = current->real_cred->uid;
 	temp_uid = user;
@@ -1131,15 +1132,14 @@ int restore(char* file_name, struct super_block* sb)
 		d_drop(path_terminal_dentry);
 		d_drop(trashbin_temp_dentry);
 		nd.flags = file_type? 0: LOOKUP_DIRECTORY; 
-		err_dentry = wrapfs_lookup(parent_dentry->d_inode, restore_dentry, &nd);
-		err = PTR_ERR(err_dentry);
-		if(IS_ERR(err_dentry) && err!=-ENOENT)
-		{
+		err = vfs_path_lookup(parent_dentry,current->fs->pwd.mnt, restore_dentry->d_iname, nd.flags, &final_path);
+		if(err < 0)
 			goto flag_put;	
-		}
+		path_put(&final_path);
 	}
 
 /* free buffers, dput dentries and put paths */
+
 
 #ifdef DELETE_KEEPING_SAME_NAME
 original_dentry_put:
