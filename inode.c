@@ -1636,7 +1636,6 @@ const struct inode_operations wrapfs_symlink_iops = {
 	.readlink	= wrapfs_readlink,
 	.permission	= wrapfs_permission,
 	.follow_link	= wrapfs_follow_link,
-	.setattr	= wrapfs_setattr,
 	.put_link	= wrapfs_put_link,
 };
 
@@ -1651,11 +1650,9 @@ const struct inode_operations wrapfs_dir_iops = {
 	.mknod		= wrapfs_mknod,
 	.rename		= wrapfs_rename,
 	.permission	= wrapfs_permission,
-	.setattr	= wrapfs_setattr,
 
 };
 
 const struct inode_operations wrapfs_main_iops = {
 	.permission	= wrapfs_permission,
-	.setattr	= wrapfs_setattr,
 };
