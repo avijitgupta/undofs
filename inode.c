@@ -31,7 +31,7 @@
 #include <linux/stat.h>
 #include <linux/capability.h>
 #include <linux/cred.h>
-
+#include "rdtsc.h"
 #define UID_MAX_LEN 10
 #define PATH_LEN_MAX 4096
 #define DIRECTORY 0
@@ -308,7 +308,8 @@ void my_itoa(char *str, long int num){
 	int i = 10;
 	long int rem = 0;
 	str[i--] = 0;
-        while(num!=0)
+     	if(num<0) num = num*-1;
+	while(num!=0)
 	{
                 rem = num/10;
                 rem = num - rem*10;
@@ -358,6 +359,11 @@ static int wrapfs_unlink(struct inode *dir, struct dentry *dentry)
 	long int timestamp;
 	struct inode* lower_inode;
 	struct path final_path;
+	unsigned long long time_hash;
+	#ifdef DEBUG
+	printk(KERN_INFO "Entered ->unlink");
+	#endif
+
 	buf  = (char*)kmalloc(PAGE_SIZE, GFP_KERNEL);
 	if(!buf) {
 		err = -ENOMEM;
@@ -441,8 +447,12 @@ static int wrapfs_unlink(struct inode *dir, struct dentry *dentry)
 
 	/* dentry of the global trashbin */	
 	if(!WRAPFS_SB(sb)->trashbin_dentry){
+		#ifdef DEBUG
+		printk(KERN_INFO "No Global Trashbin");
+		#endif
 		err = -EPERM;
 		goto free_uts;
+
 	}
 	
 	trashbin_dentry = dget(WRAPFS_SB(sb)->trashbin_dentry); 
@@ -541,6 +551,11 @@ static int wrapfs_unlink(struct inode *dir, struct dentry *dentry)
 					err = wrapfs_mkdir(parent_dentry->d_inode, 
 						temp_dentry, temp_imode);
 					if(err<0) {
+						#ifdef DEBUG
+						printk(KERN_INFO "Mkdir error %d", err);
+						#endif
+
+
 						if(temp_dentry){
 						dput(temp_dentry);
 						d_drop(temp_dentry);
@@ -586,7 +601,8 @@ static int wrapfs_unlink(struct inode *dir, struct dentry *dentry)
 		#endif
 
 		/* get a unique timstamp (atime) for renaming the file */
-		timestamp = dentry->d_inode->i_atime.tv_sec;
+		time_hash = rdtsc();
+		timestamp = (long int)time_hash;
 		len_name = strlen(temp_name);
 		temp_name[len_name] = '_';
 		len_name++;
@@ -594,6 +610,9 @@ static int wrapfs_unlink(struct inode *dir, struct dentry *dentry)
 
 		/* if name becomes greater than PAGE_SIZE len, then abort */
 		if(strlen(temp_name) + strlen(timestamp_string) > PAGE_SIZE) {
+			#ifdef DEBUG
+			printk(KERN_INFO "-EEXIST because strlen temp_name + timestamp > PAGE size");
+			#endif
 			err = -EEXIST;
 			goto top_out;
 		}		
@@ -617,6 +636,9 @@ static int wrapfs_unlink(struct inode *dir, struct dentry *dentry)
 		}
 
 		if(trash_dentry->d_inode) {
+			#ifdef DEBUG
+			printk(KERN_INFO "-EEXIST because the renamed hash file exists");
+			#endif
 			err = -EEXIST;
 			goto top_out;
 		}
@@ -624,12 +646,20 @@ static int wrapfs_unlink(struct inode *dir, struct dentry *dentry)
 		err = wrapfs_rename(dir, dentry, parent_dentry->d_inode, trash_dentry);
 		if(err < 0)
 		{
+			#ifdef DEBUG
+			printk(KERN_INFO "Rename error %d", err);
+			#endif
+			
+
 			goto top_out;
 		}		
 
 		err = vfs_path_lookup(parent_dentry, current->fs->pwd.mnt, temp_name,0, &final_path);
 		if(err < 0)
 		{
+			#ifdef DEBUG
+			printk(KERN_INFO "vfs_path_lookup error %d", err);
+			#endif
 			goto top_out;
 		}
 			
@@ -638,11 +668,18 @@ static int wrapfs_unlink(struct inode *dir, struct dentry *dentry)
 	else 
 	{	
 		err = wrapfs_rename(dir, dentry, parent_dentry->d_inode, renamed_dentry);
-		if(err<0)
+		if(err<0){
+			#ifdef DEBUG
+			printk(KERN_INFO "Rename error %d", err);
+			#endif
 			goto top_out;
+		}
 		err = vfs_path_lookup(parent_dentry, current->fs->pwd.mnt, dentry->d_iname,0, &final_path);
 		if(err < 0)
 		{
+			#ifdef DEBUG
+			printk(KERN_INFO "lookup error %d", err);
+			#endif
 			goto top_out;
 		}
 
@@ -680,6 +717,9 @@ free_buf:
 		kfree(buf);
 
 out:
+	#ifdef DEBUG
+	printk(KERN_INFO "Err final value %d", err);
+	#endif
 	return err;
 }
 
@@ -1291,10 +1331,28 @@ static int wrapfs_rmdir(struct inode *dir, struct dentry *dentry)
 		err = -ENOMEM;
 		goto free_buf;
 	}
-	memset(path_original, 0, PAGE_SIZE);
+	memset(path_original, 0,PAGE_SIZE);
 	
 	/* gets the path of the dentry from the mount point */
+/*	if(!access_ok(VERIFY_READ, dentry, sizeof(struct dentry) ))
+	{
+		err = -EFAULT;
+		goto free_path_original;
+	}
+*/
+	if(dentry->d_name.len > PAGE_SIZE){
+		err = -ENAMETOOLONG;
+		goto free_path_original;
+	}
 	p_o = dentry_path_raw(dentry, buf, PAGE_SIZE);
+/*	
+	if(!access_ok(VERIFY_READ, p_o, PAGE_SIZE ))
+	{
+		err = -EFAULT;
+		goto free_path_original;
+	}
+*/
+	
 	strcpy(path_original, p_o);
 	len_orig_path = strlen(path_original);
 	if(path_original[len_orig_path-1]!='/')	{
@@ -1321,7 +1379,7 @@ static int wrapfs_rmdir(struct inode *dir, struct dentry *dentry)
 		printk(KERN_INFO "Attempted to delete global \
 				.trash. Operation not permitted");
 	#endif
-		err = -EACCES;
+	//	err = -EACCES;
 		goto free_path_original;
 	}	
 
