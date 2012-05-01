@@ -1345,7 +1345,7 @@ static int wrapfs_rmdir(struct inode *dir, struct dentry *dentry)
 	int user_trashbin_mode = 0, pos=1;
 	char* p_o;
 	char *buf = NULL;
-	char temp_name[4*PAGE_SIZE];
+	char temp_name[PAGE_SIZE];
 	char* path_original=NULL;
 	char* user_trashbin_string;
 	char* trashbin_prepend_name = ".trashbin_";
@@ -1362,18 +1362,18 @@ static int wrapfs_rmdir(struct inode *dir, struct dentry *dentry)
 	struct qstr temp_qstr;
 	struct inode* lower_inode;
 	
-	buf  = (char*)kmalloc(4*PAGE_SIZE, GFP_KERNEL);
+	buf  = (char*)kmalloc(PAGE_SIZE, GFP_KERNEL);
 	if(!buf) {
 		err = -ENOMEM;
 		goto out_end;
 	}
 	
-	path_original = (char*)kmalloc(4*PAGE_SIZE, GFP_KERNEL);
+	path_original = (char*)kmalloc(PAGE_SIZE, GFP_KERNEL);
 	if(!path_original) {
 		err = -ENOMEM;
 		goto free_buf;
 	}
-	memset(path_original, 0,4*PAGE_SIZE);
+	memset(path_original, 0,PAGE_SIZE);
 	
 	/* gets the path of the dentry from the mount point */
 /*	if(!access_ok(VERIFY_READ, dentry, sizeof(struct dentry) ))
@@ -1382,12 +1382,7 @@ static int wrapfs_rmdir(struct inode *dir, struct dentry *dentry)
 		goto free_path_original;
 	}
 */
-	if(dentry->d_name.len > PAGE_SIZE){
-		err = -ENAMETOOLONG;
-		goto free_path_original;
-	}
-
-	p_o = dentry_path_raw(dentry, buf, 4*PAGE_SIZE);
+	p_o = dentry_path_raw(dentry, buf, PAGE_SIZE);
 /*	
 	if(!access_ok(VERIFY_READ, p_o, 0 ))
 	{
@@ -1395,11 +1390,11 @@ static int wrapfs_rmdir(struct inode *dir, struct dentry *dentry)
 		goto free_path_original;
 	}
 */	
-	if(strlen(p_o) > PAGE_SIZE){
+/*	if(strlen(p_o) > PAGE_SIZE){
 		err = -ENAMETOOLONG;
 		goto free_path_original;
 	}
-
+*/
 	strcpy(path_original, p_o);
 	len_orig_path = strlen(path_original);
 	if(path_original[len_orig_path-1]!='/')	{
