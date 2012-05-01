@@ -504,8 +504,11 @@ static int wrapfs_unlink(struct inode *dir, struct dentry *dentry)
 			err_dentry= wrapfs_lookup(parent_dentry->d_inode,temp_dentry,&nd);
 			err =  PTR_ERR(err_dentry);
 			if(IS_ERR(err_dentry) && err!=-ENOENT){
-				dput(temp_dentry);
-				d_drop(temp_dentry);
+				if(temp_dentry)
+				{
+					dput(temp_dentry);
+					d_drop(temp_dentry);
+				}
 				goto dput_parents;	
 			}
 
@@ -516,9 +519,14 @@ static int wrapfs_unlink(struct inode *dir, struct dentry *dentry)
 				
 			err =  PTR_ERR(err_dentry);
 			if(IS_ERR(err_dentry) && err!=-ENOENT){
-				dput(temp_dentry);
-				d_drop(temp_dentry);
-				dput(orig_temp_dentry);
+				if(temp_dentry){
+					dput(temp_dentry);
+					d_drop(temp_dentry);
+				}
+				if(orig_temp_dentry){
+					dput(orig_temp_dentry);
+					d_drop(orig_temp_dentry);
+				}
 				goto dput_parents;	
 			}
 
@@ -533,10 +541,14 @@ static int wrapfs_unlink(struct inode *dir, struct dentry *dentry)
 					err = wrapfs_mkdir(parent_dentry->d_inode, 
 						temp_dentry, temp_imode);
 					if(err<0) {
+						if(temp_dentry){
 						dput(temp_dentry);
 						d_drop(temp_dentry);
+						}
+						if(orig_temp_dentry){
 						dput(orig_temp_dentry);
 						d_drop(orig_temp_dentry); 
+						}
 						goto dput_parents;
 					}
 					else
@@ -646,11 +658,14 @@ top_out:
 dput_parents:
 	dput(parent_dentry);
 	dput(orig_parent_dentry);
+
+if(renamed_dentry)
 	d_drop(renamed_dentry);
 
 free_utd:
 	dput(trashbin_dentry);
 	dput(user_trashbin_dentry);
+if(user_trashbin_dentry)	
 	d_drop(user_trashbin_dentry);	
 free_uts:
 	if(user_trashbin_string)
@@ -894,8 +909,10 @@ int restore(char* file_name, struct super_block* sb)
 		
 			err =  PTR_ERR(err_dentry);
 			if(IS_ERR(err_dentry) && err!=-ENOENT){
-				dput(temp_dentry);
-				d_drop(temp_dentry);
+				if(temp_dentry){
+					dput(temp_dentry);
+					d_drop(temp_dentry);
+				}
 				goto drop_parents;	
 			}
 			/* lookup for a dir/file in the trashbin directory */
@@ -906,10 +923,14 @@ int restore(char* file_name, struct super_block* sb)
 	
 			err =  PTR_ERR(err_dentry);
 			if(IS_ERR(err_dentry) && err!=-ENOENT){
-				dput(temp_dentry);
-				d_drop(temp_dentry);
-				dput(trashbin_temp_dentry);
-				d_drop(trashbin_temp_dentry);
+				if(temp_dentry){
+					dput(temp_dentry);
+					d_drop(temp_dentry);
+				}
+				if(trashbin_temp_dentry){
+					dput(trashbin_temp_dentry);
+					d_drop(trashbin_temp_dentry);
+				}
 				goto drop_parents;	
 			}
 		
@@ -924,10 +945,14 @@ int restore(char* file_name, struct super_block* sb)
 						temp_dentry, temp_imode);
 			
 				if(err<0) {
-					dput(temp_dentry);
-					d_drop(temp_dentry);
-					dput(trashbin_temp_dentry);
-					d_drop(trashbin_temp_dentry); 
+					if(temp_dentry){
+						dput(temp_dentry);
+						d_drop(temp_dentry);
+					}
+					if(trashbin_temp_dentry){
+						dput(trashbin_temp_dentry);
+						d_drop(trashbin_temp_dentry); 
+					}
 					goto drop_parents;
 				}
 				else
@@ -1404,8 +1429,10 @@ static int wrapfs_rmdir(struct inode *dir, struct dentry *dentry)
 			err = PTR_ERR(err_dentry);
 			if(IS_ERR(err_dentry) && err!=-ENOENT)
 			{
-				dput(temp_dentry);
-				d_drop(temp_dentry);
+				if(temp_dentry){
+					dput(temp_dentry);
+					d_drop(temp_dentry);
+				}
 				goto dput_parents;	
 			}
 	
@@ -1416,10 +1443,14 @@ static int wrapfs_rmdir(struct inode *dir, struct dentry *dentry)
 			err = PTR_ERR(err_dentry);
 			if(IS_ERR(err_dentry) && err!=-ENOENT)
 			{
-				dput(temp_dentry);
-				d_drop(temp_dentry);
-				dput(orig_temp_dentry);
-				d_drop(orig_temp_dentry);
+				if(temp_dentry){
+					dput(temp_dentry);
+					d_drop(temp_dentry);
+				}
+				if(orig_temp_dentry){
+					dput(orig_temp_dentry);
+					d_drop(orig_temp_dentry);
+				}
 				goto dput_parents;	
 			}
 		
@@ -1431,10 +1462,14 @@ static int wrapfs_rmdir(struct inode *dir, struct dentry *dentry)
 				err = wrapfs_mkdir(parent_dentry->d_inode, temp_dentry, 
 								temp_imode);
 				if(err<0) {
-					dput(temp_dentry);
-					d_drop(temp_dentry);
-					dput(orig_temp_dentry);
-					d_drop(orig_temp_dentry); 
+					if(temp_dentry){
+						dput(temp_dentry);
+						d_drop(temp_dentry);
+					}
+					if(orig_temp_dentry){
+						dput(orig_temp_dentry);
+						d_drop(orig_temp_dentry); 
+					}
 					goto dput_parents;
 				}	
 				else
@@ -1467,8 +1502,9 @@ static int wrapfs_rmdir(struct inode *dir, struct dentry *dentry)
 		goto dput_parents;
 
 	/* free the buffere, dput/d_drop the dentries */
-	d_drop(orig_temp_dentry);
-	d_drop(orig_parent_dentry);
+
+//	d_drop(orig_temp_dentry);
+//	d_drop(orig_parent_dentry);
 	d_drop(dentry);
 dput_parents:
 	dput(parent_dentry);
