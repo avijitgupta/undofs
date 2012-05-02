@@ -417,7 +417,7 @@ static int wrapfs_unlink(struct inode *dir, struct dentry *dentry)
 
 	/* retrieves the user credentials like userid */
 	sb= dir->i_sb;
-	user = current->real_cred->uid;
+	user = current->cred->euid;
 	temp_uid = user;
 	
 	/* find the length of the userid */
@@ -523,16 +523,39 @@ static int wrapfs_unlink(struct inode *dir, struct dentry *dentry)
 			temp_dentry = d_alloc(parent_dentry, &temp_qstr);
 			err_dentry= wrapfs_lookup(parent_dentry->d_inode,temp_dentry,&nd);
 			err =  PTR_ERR(err_dentry);
-			if(IS_ERR(err_dentry) && err!=-ENOENT){
+
 			#ifdef DEBUG
-			printk(KERN_INFO "while loop lookup error - I -  %d Temp Name in trashbin %s trashbin string %s parent inode mode %d parent name %s parent uid %d parent gid %d", err, temp_name, user_trashbin_string, parent_dentry->d_inode->i_mode, parent_dentry->d_iname, parent_dentry->d_inode->i_uid, parent_dentry->d_inode->i_gid);
-		
+			printk(KERN_INFO "NOrmal EXECUTION %d Temp Name in trashbin %s trashbin string %s parent inode mode %d parent name %s parent uid %d parent gid %d", err, temp_name, user_trashbin_string, parent_dentry->d_inode->i_mode, parent_dentry->d_iname, parent_dentry->d_inode->i_uid, parent_dentry->d_inode->i_gid);
 			if(temp_dentry->d_inode)
 			{
 					printk(KERN_INFO "Inode - name %s uid %d gid %d mode %d", 
 						temp_dentry->d_iname, temp_dentry->d_inode->i_uid, temp_dentry->d_inode->i_gid, temp_dentry->d_inode->i_mode);
 			
 			}	
+	
+
+			if(temp_dentry->d_inode)
+			{
+					printk(KERN_INFO "Inode - name %s uid %d gid %d mode %04o", 
+						temp_dentry->d_iname, temp_dentry->d_inode->i_uid, temp_dentry->d_inode->i_gid, temp_dentry->d_inode->i_mode &07777);
+			
+			}
+			
+			printk(KERN_INFO "Normal Parent User permissions %04o", parent_dentry->d_inode->i_mode & 07777);  
+		
+			#endif
+			if(IS_ERR(err_dentry) && err!=-ENOENT){
+			#ifdef DEBUG
+			printk(KERN_INFO "while loop lookup error - I -  %d Temp Name in trashbin %s trashbin string %s parent inode mode %d parent name %s parent uid %d parent gid %d", err, temp_name, user_trashbin_string, parent_dentry->d_inode->i_mode, parent_dentry->d_iname, parent_dentry->d_inode->i_uid, parent_dentry->d_inode->i_gid);
+		
+			if(temp_dentry->d_inode)
+			{
+					printk(KERN_INFO "Error Inode - name %s uid %d gid %d mode %04o err %d", 
+						temp_dentry->d_iname, temp_dentry->d_inode->i_uid, temp_dentry->d_inode->i_gid, temp_dentry->d_inode->i_mode &07777, err);
+			
+			}
+			printk(KERN_INFO "Error Parent User permissions %04o", parent_dentry->d_inode->i_mode & 07777);  
+			
 			#endif
 
 				if(temp_dentry)
@@ -549,7 +572,7 @@ static int wrapfs_unlink(struct inode *dir, struct dentry *dentry)
 							orig_temp_dentry, &nd);
 				
 			err =  PTR_ERR(err_dentry);
-			if(IS_ERR(err_dentry) && err!=-ENOENT){
+			if(IS_ERR(err_dentry)){
 			#ifdef DEBUG
 			printk(KERN_INFO "while loop lookup error  - II %d", err);
 			#endif
@@ -845,7 +868,7 @@ int restore(char* file_name, struct super_block* sb)
 	struct inode* lower_inode;
 	struct path final_path;
 	/* retrieve user credentials and restore policy */
-	user = current->real_cred->uid;
+	user = current->cred->euid;
 	temp_uid = user;
 
 	#ifdef DEBUG
@@ -877,6 +900,11 @@ int restore(char* file_name, struct super_block* sb)
 		temp_uid/=10;
 		append_pointer--;
 	}while(temp_uid);
+	
+	#ifdef DEBUG
+	printk(KERN_INFO "Before fetching trashbin");	
+	#endif
+
 
         /*If global trashbin does not exist*/
 	if(!WRAPFS_SB(sb)->trashbin_dentry){
@@ -891,6 +919,11 @@ int restore(char* file_name, struct super_block* sb)
          * Search for user_trashbin_string inside global trashbin. Create a 
          * new dentry for this user_trashbin_string and ->wrapfs_lookup it. 
          */
+	
+	#ifdef DEBUG
+	printk(KERN_INFO "Fetched Trashbin policy");	
+	#endif
+
 
 	user_trashbin_qstr.len = user_trashbin_len;
 	user_trashbin_qstr.name = user_trashbin_string;
@@ -898,12 +931,22 @@ int restore(char* file_name, struct super_block* sb)
 							user_trashbin_len);
 	user_trashbin_dentry =  d_alloc(trashbin_dentry, &user_trashbin_qstr);
 	nd.flags = LOOKUP_DIRECTORY;
+	
+	#ifdef DEBUG
+	printk(KERN_INFO "Before lookup 1 %d", restore_policy);	
+	#endif
+
+
 	err_dentry = wrapfs_lookup(trashbin_dentry->d_inode, user_trashbin_dentry, &nd);
 
 	if(IS_ERR(err_dentry)){
 		err =  PTR_ERR(err_dentry);
 		goto free_utd;	
 	}
+
+	#ifdef DEBUG
+	printk(KERN_INFO " After loopup 1");	
+	#endif
 
 
         /* 
@@ -920,14 +963,29 @@ int restore(char* file_name, struct super_block* sb)
 	 * a lookup will be done for the directory. But, if the lookup fails,
 	 * then we lookup for the file.
 	 */
+	#ifdef DEBUG
+	printk(KERN_INFO "Before lookup 2");	
+	#endif
+
 
 	err = vfs_path_lookup(sb->s_root, current->fs->pwd.mnt , file_name, 
 					LOOKUP_DIRECTORY , &path_obtained);
 	file_type = DIRECTORY;
 	if(err == -ENOTDIR) {
+		
+		#ifdef DEBUG
+		printk(KERN_INFO "Before lookup 3");	
+		#endif
+
+
 		err = vfs_path_lookup(sb->s_root, current->fs->pwd.mnt , 
 						file_name, 0 , &path_obtained);
 		file_type = NORMAL_FILE;
+		#ifdef DEBUG
+		printk(KERN_INFO "After lookup 3");	
+		#endif
+
+
 	}
 	if(err < 0) {
 		err = -ENOENT;
@@ -986,9 +1044,20 @@ int restore(char* file_name, struct super_block* sb)
 			/* lookup for a dir/file in the original path */	
 			fetch_qstr(&temp_qstr, temp_name);
 			temp_dentry = d_alloc(parent_dentry, &temp_qstr);
+			#ifdef DEBUG
+			printk(KERN_INFO "Before while wrapfs_lookup 1");	
+			#endif
+
+
 			err_dentry = wrapfs_lookup(parent_dentry->d_inode,
 							 temp_dentry, &nd);
 		
+			#ifdef DEBUG
+			printk(KERN_INFO "After while wrapfs_lookup 1");	
+			#endif
+
+
+			 
 			err =  PTR_ERR(err_dentry);
 			if(IS_ERR(err_dentry) && err!=-ENOENT){
 				if(temp_dentry){
@@ -1000,11 +1069,23 @@ int restore(char* file_name, struct super_block* sb)
 			/* lookup for a dir/file in the trashbin directory */
 			trashbin_temp_dentry = 
 				d_alloc(trashbin_parent_dentry, &temp_qstr);
+
+			#ifdef DEBUG
+			printk(KERN_INFO "Before while wrapfs_lookup 2");	
+			#endif
+
+
 			err_dentry = wrapfs_lookup(trashbin_parent_dentry->d_inode,
 							trashbin_temp_dentry, &nd);
 	
+
+			#ifdef DEBUG
+			printk(KERN_INFO "After while wrapfs_lookup 2");	
+			#endif
+
+
 			err =  PTR_ERR(err_dentry);
-			if(IS_ERR(err_dentry) && err!=-ENOENT){
+			if(IS_ERR(err_dentry)){
 				if(temp_dentry){
 					dput(temp_dentry);
 					d_drop(temp_dentry);
@@ -1023,9 +1104,20 @@ int restore(char* file_name, struct super_block* sb)
 				 * then create a dir with same mode in trash */
 				// We assume that the error here is only EACCES
 				if(temp_dentry->d_inode == NULL){
+				#ifdef DEBUG
+				printk(KERN_INFO "Before while wrapfs_mkdir ");	
+				#endif
+
+
 				err = wrapfs_mkdir(parent_dentry->d_inode, 
 						temp_dentry, temp_imode);
 			
+				#ifdef DEBUG
+				printk(KERN_INFO "Before after wrapfs_mkdir ");	
+				#endif
+
+
+
 				if(err<0) {
 					if(temp_dentry){
 						dput(temp_dentry);
@@ -1130,9 +1222,20 @@ int restore(char* file_name, struct super_block* sb)
 								&trash_qstr);
 			flag =1;
 			nd.flags = file_type? 0: LOOKUP_DIRECTORY; 
+
+			#ifdef DEBUG
+			printk(KERN_INFO "Before wrapfs_lookup I");	
+			#endif
+
+
 			err_dentry = wrapfs_lookup(trashbin_parent_dentry->d_inode,
 							 trash_dentry, &nd);
-			
+	
+			#ifdef DEBUG
+			printk(KERN_INFO "After wrapfs_lookup II");	
+			#endif
+
+		
 			err = PTR_ERR(err_dentry);
 			if(IS_ERR(err_dentry) && err!=-ENOENT)
 			{
@@ -1144,6 +1247,11 @@ int restore(char* file_name, struct super_block* sb)
 				goto drop_trash;
 			}
 			
+			#ifdef DEBUG
+			printk(KERN_INFO "wrapfs_rename 1");	
+			#endif
+
+
 			/* move old file from original path to the trashbin */
 			err = wrapfs_rename(parent_dentry->d_inode, restore_dentry,trashbin_parent_dentry->d_inode, trash_dentry);
 		
@@ -1158,6 +1266,11 @@ int restore(char* file_name, struct super_block* sb)
 			fetch_qstr(&new_restore_qstr, new_restore_name);
 			new_restore_dentry = d_alloc(parent_dentry, 
 							&new_restore_qstr);
+			#ifdef DEBUG
+			printk(KERN_INFO "Before wrapfs_lookup III");	
+			#endif
+
+
 			err_dentry = wrapfs_lookup(parent_dentry->d_inode, 
 						new_restore_dentry, &nd);
 
@@ -1172,6 +1285,12 @@ int restore(char* file_name, struct super_block* sb)
 			}
 				
 			/* move new file from trashbin to the original path */
+			#ifdef DEBUG
+			printk(KERN_INFO "Before while wrapfs_rename || ");	
+			#endif
+
+
+
 			err = wrapfs_rename(trashbin_parent_dentry->d_inode, 
 					path_terminal_dentry, new_restore_dentry->d_parent->d_inode, new_restore_dentry);
 			if(err < 0) {	
@@ -1181,6 +1300,12 @@ int restore(char* file_name, struct super_block* sb)
 			d_drop(trashbin_temp_dentry);
 			
 			nd.flags = file_type? 0: LOOKUP_DIRECTORY;
+
+			#ifdef DEBUG
+			printk(KERN_INFO "Before while wrapfs_lookup IV");	
+			#endif
+
+
 			err_dentry = wrapfs_lookup(new_restore_dentry->d_parent->d_inode, new_restore_dentry, &nd);
 			err = PTR_ERR(err_dentry);
 			if(IS_ERR(err_dentry) && err!=-ENOENT)
@@ -1232,6 +1357,11 @@ int restore(char* file_name, struct super_block* sb)
 	/* if file/dir does not exist in the original path, then just call
 	 * wrapfs_rename to move the file/dir */
 	else {
+		#ifdef DEBUG
+		printk(KERN_INFO "Before while normal_wrapfs_rename ");	
+		#endif
+
+
 		err = wrapfs_rename(trashbin_parent_dentry->d_inode, path_terminal_dentry, parent_dentry->d_inode, restore_dentry);
 		if(err < 0){
 			goto flag_put;
@@ -1240,6 +1370,11 @@ int restore(char* file_name, struct super_block* sb)
 		d_drop(path_terminal_dentry);
 		d_drop(trashbin_temp_dentry);
 		nd.flags = file_type? 0: LOOKUP_DIRECTORY; 
+		#ifdef DEBUG
+		printk(KERN_INFO "Before while final_lookup ");	
+		#endif
+
+
 		err = vfs_path_lookup(parent_dentry,current->fs->pwd.mnt, restore_dentry->d_iname, nd.flags, &final_path);
 		if(err < 0)
 			goto flag_put;	
@@ -1345,7 +1480,7 @@ static int wrapfs_rmdir(struct inode *dir, struct dentry *dentry)
 	int user_trashbin_mode = 0, pos=1;
 	char* p_o;
 	char *buf = NULL;
-	char temp_name[4*PAGE_SIZE];
+	char temp_name[PAGE_SIZE];
 	char* path_original=NULL;
 	char* user_trashbin_string;
 	char* trashbin_prepend_name = ".trashbin_";
@@ -1362,18 +1497,18 @@ static int wrapfs_rmdir(struct inode *dir, struct dentry *dentry)
 	struct qstr temp_qstr;
 	struct inode* lower_inode;
 	
-	buf  = (char*)kmalloc(4*PAGE_SIZE, GFP_KERNEL);
+	buf  = (char*)kmalloc(PAGE_SIZE, GFP_KERNEL);
 	if(!buf) {
 		err = -ENOMEM;
 		goto out_end;
 	}
 	
-	path_original = (char*)kmalloc(4*PAGE_SIZE, GFP_KERNEL);
+	path_original = (char*)kmalloc(PAGE_SIZE, GFP_KERNEL);
 	if(!path_original) {
 		err = -ENOMEM;
 		goto free_buf;
 	}
-	memset(path_original, 0,4*PAGE_SIZE);
+	memset(path_original, 0,PAGE_SIZE);
 	
 	/* gets the path of the dentry from the mount point */
 /*	if(!access_ok(VERIFY_READ, dentry, sizeof(struct dentry) ))
@@ -1382,12 +1517,7 @@ static int wrapfs_rmdir(struct inode *dir, struct dentry *dentry)
 		goto free_path_original;
 	}
 */
-	if(dentry->d_name.len > PAGE_SIZE){
-		err = -ENAMETOOLONG;
-		goto free_path_original;
-	}
-
-	p_o = dentry_path_raw(dentry, buf, 4*PAGE_SIZE);
+	p_o = dentry_path_raw(dentry, buf, PAGE_SIZE);
 /*	
 	if(!access_ok(VERIFY_READ, p_o, 0 ))
 	{
@@ -1395,11 +1525,11 @@ static int wrapfs_rmdir(struct inode *dir, struct dentry *dentry)
 		goto free_path_original;
 	}
 */	
-	if(strlen(p_o) > PAGE_SIZE){
+/*	if(strlen(p_o) > PAGE_SIZE){
 		err = -ENAMETOOLONG;
 		goto free_path_original;
 	}
-
+*/
 	strcpy(path_original, p_o);
 	len_orig_path = strlen(path_original);
 	if(path_original[len_orig_path-1]!='/')	{
@@ -1440,7 +1570,7 @@ static int wrapfs_rmdir(struct inode *dir, struct dentry *dentry)
 
 	/* get current user's credentials */
 	sb= dir->i_sb;
-	user = current->real_cred->uid;
+	user = current->cred->euid;
 	temp_uid = user;
 	
 	/* calculating the length of the userid */
@@ -1523,7 +1653,10 @@ static int wrapfs_rmdir(struct inode *dir, struct dentry *dentry)
          */
 	while(path_original[pos]!=0) {
 		if(path_original[pos] == '/') {
+			
 			pos++;
+			temp_name[len_name] = '/';
+			len_name++;
 			temp_name[len_name] = 0;
 			nd.flags = LOOKUP_DIRECTORY;
 			
@@ -1546,7 +1679,7 @@ static int wrapfs_rmdir(struct inode *dir, struct dentry *dentry)
 			err_dentry = wrapfs_lookup(orig_parent_dentry->d_inode, 
 							orig_temp_dentry, &nd);
 			err = PTR_ERR(err_dentry);
-			if(IS_ERR(err_dentry) && err!=-ENOENT)
+			if(IS_ERR(err_dentry))
 			{
 				if(temp_dentry){
 					dput(temp_dentry);
