@@ -14,7 +14,7 @@ int main(int argc, char **argv)
 	/* Initialization of the variables */
 	int index, c, errno;
         bool restore_flag = false;
-        int i, rval=-1, fd, md5_ret=0;
+        int rval=-1, fd;
         char path_to_mount[PATH_MAXLEN];
         char file[PATH_MAXLEN];
 	errno = 0;
@@ -56,8 +56,7 @@ int main(int argc, char **argv)
 				
 			/* other unknown arguments, if entered */
 			default :
-	             		if (isprint(optopt))
-					fprintf (stderr, "Unknown option `-%c'.\n", optopt);
+				fprintf (stderr, "Unknown option `-%c'.\n", optopt);
 				errno = -EINVAL;
 				goto out;
 		}
