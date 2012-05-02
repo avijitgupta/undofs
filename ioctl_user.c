@@ -12,12 +12,11 @@
 int main(int argc, char **argv)
 {
 	/* Initialization of the variables */
-	int index, c, errno;
+	int index, c, err;
         bool restore_flag = false;
-        int i, rval=-1, fd, md5_ret=0;
+        int rval=-1, fd;
         char path_to_mount[PATH_MAXLEN];
         char file[PATH_MAXLEN];
-	errno = 0;
 		
 	/* process the command line arguments */
 	while ((c = getopt(argc, argv, "r:h")) != -1)
@@ -29,17 +28,16 @@ int main(int argc, char **argv)
                                 	restore_flag = true;
 					if((optarg = strstr(optarg, ".trash/"))!= NULL){
 		                                strncpy(file, optarg, PATH_MAXLEN);
-						printf("File to be restored : %s\n", file);
 					}
 					else{
-						errno = -EINVAL;
+						err = -EINVAL;
 						printf("Please give path name with /.trash/\n");
 						goto out;
 					}
 					
         	                }
                 	        else{
-					errno = -EINVAL;
+					err = -EINVAL;
                         	        printf("Choose only one operation at a time\n");
 					goto out;
 	                        }
@@ -50,15 +48,14 @@ int main(int argc, char **argv)
 				printf("    -r:  to restore a file\n");
 				printf("    -h:  to provide a helpful usage message\n");
 				printf("    mount point: point where filesystem is mounted\n");
-				errno = -EINVAL;
+				err = -EINVAL;
 				goto out;
 				break;
 				
 			/* other unknown arguments, if entered */
 			default :
-	             		if (isprint(optopt))
-					fprintf (stderr, "Unknown option `-%c'.\n", optopt);
-				errno = -EINVAL;
+				fprintf (stderr, "Unknown option `-%c'.\n", optopt);
+				err = -EINVAL;
 				goto out;
 		}
 	}
@@ -67,21 +64,21 @@ int main(int argc, char **argv)
 	if(restore_flag == false){
 		printf("Usage :./ioctl {-r} [-h HELP] <mount point>.\n");
 		printf("See more usage with : ./ioctl -h\n");
-		errno = -EINVAL;
+		err = -EINVAL;
 		goto out;
 	}
 
 	/* filenames missing in the command line arguments */
 	if(optind+1 > argc){
 		printf("Arguments missing in command line. Please use ./ioctl -h\n");
-		errno = -EINVAL;
+		err = -EINVAL;
 		goto out;
 	}
 
 	/* arguments more than required in the command line */
 	else if(optind+1 < argc){	
 		printf("More than required arguments in Non-option arguments\n");
-		errno = -EINVAL;
+		err = -EINVAL;
 		goto out;
 	}
 
@@ -91,10 +88,9 @@ int main(int argc, char **argv)
 		/* for an input file name */
 		if(index == optind){
 			strcpy(path_to_mount, argv[optind]);
-			printf("Mount Point Set:%s\n", path_to_mount);
 		}
 		else{
-			errno = -EINVAL;
+			err = -EINVAL;
 			printf("Non-option arguments, which are not required, entered.\n");
 			goto out;
 		}
@@ -103,22 +99,21 @@ int main(int argc, char **argv)
 	fd = open(path_to_mount, O_RDONLY);
     	if(fd < 0){
         	printf("Error opening the directory\n");
-		errno = fd;
+		err = fd;
 	        goto out;
     	}
 
 	if(restore_flag){
 		rval = ioctl(fd, IORESTORE, file);
 		if(rval < 0){
-			errno = rval;
-			perror("IOCTL ERROR");
-			printf("ioctl error : %d\n", errno);
+			err = rval;
+			perror("IOCTL ERROR ");
 		}
         }
 
 out:
 	if(fd)
 	close(fd);
-	return errno;
+	return err;
 }
 
