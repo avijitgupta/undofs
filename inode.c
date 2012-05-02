@@ -417,7 +417,7 @@ static int wrapfs_unlink(struct inode *dir, struct dentry *dentry)
 
 	/* retrieves the user credentials like userid */
 	sb= dir->i_sb;
-	user = current->real_cred->uid;
+	user = current->cred->euid;
 	temp_uid = user;
 	
 	/* find the length of the userid */
@@ -523,16 +523,39 @@ static int wrapfs_unlink(struct inode *dir, struct dentry *dentry)
 			temp_dentry = d_alloc(parent_dentry, &temp_qstr);
 			err_dentry= wrapfs_lookup(parent_dentry->d_inode,temp_dentry,&nd);
 			err =  PTR_ERR(err_dentry);
-			if(IS_ERR(err_dentry) && err!=-ENOENT){
+
 			#ifdef DEBUG
-			printk(KERN_INFO "while loop lookup error - I -  %d Temp Name in trashbin %s trashbin string %s parent inode mode %d parent name %s parent uid %d parent gid %d", err, temp_name, user_trashbin_string, parent_dentry->d_inode->i_mode, parent_dentry->d_iname, parent_dentry->d_inode->i_uid, parent_dentry->d_inode->i_gid);
-		
+			printk(KERN_INFO "NOrmal EXECUTION %d Temp Name in trashbin %s trashbin string %s parent inode mode %d parent name %s parent uid %d parent gid %d", err, temp_name, user_trashbin_string, parent_dentry->d_inode->i_mode, parent_dentry->d_iname, parent_dentry->d_inode->i_uid, parent_dentry->d_inode->i_gid);
 			if(temp_dentry->d_inode)
 			{
 					printk(KERN_INFO "Inode - name %s uid %d gid %d mode %d", 
 						temp_dentry->d_iname, temp_dentry->d_inode->i_uid, temp_dentry->d_inode->i_gid, temp_dentry->d_inode->i_mode);
 			
 			}	
+	
+
+			if(temp_dentry->d_inode)
+			{
+					printk(KERN_INFO "Inode - name %s uid %d gid %d mode %04o", 
+						temp_dentry->d_iname, temp_dentry->d_inode->i_uid, temp_dentry->d_inode->i_gid, temp_dentry->d_inode->i_mode &07777);
+			
+			}
+			
+			printk(KERN_INFO "Normal Parent User permissions %04o", parent_dentry->d_inode->i_mode & 07777);  
+		
+			#endif
+			if(IS_ERR(err_dentry) && err!=-ENOENT){
+			#ifdef DEBUG
+			printk(KERN_INFO "while loop lookup error - I -  %d Temp Name in trashbin %s trashbin string %s parent inode mode %d parent name %s parent uid %d parent gid %d", err, temp_name, user_trashbin_string, parent_dentry->d_inode->i_mode, parent_dentry->d_iname, parent_dentry->d_inode->i_uid, parent_dentry->d_inode->i_gid);
+		
+			if(temp_dentry->d_inode)
+			{
+					printk(KERN_INFO "Error Inode - name %s uid %d gid %d mode %04o err %d", 
+						temp_dentry->d_iname, temp_dentry->d_inode->i_uid, temp_dentry->d_inode->i_gid, temp_dentry->d_inode->i_mode &07777, err);
+			
+			}
+			printk(KERN_INFO "Error Parent User permissions %04o", parent_dentry->d_inode->i_mode & 07777);  
+			
 			#endif
 
 				if(temp_dentry)
@@ -845,7 +868,7 @@ int restore(char* file_name, struct super_block* sb)
 	struct inode* lower_inode;
 	struct path final_path;
 	/* retrieve user credentials and restore policy */
-	user = current->real_cred->uid;
+	user = current->cred->euid;
 	temp_uid = user;
 
 	#ifdef DEBUG
@@ -1435,7 +1458,7 @@ static int wrapfs_rmdir(struct inode *dir, struct dentry *dentry)
 
 	/* get current user's credentials */
 	sb= dir->i_sb;
-	user = current->real_cred->uid;
+	user = current->cred->euid;
 	temp_uid = user;
 	
 	/* calculating the length of the userid */
