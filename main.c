@@ -25,7 +25,7 @@ static int wrapfs_read_super(struct super_block *sb, void *raw_data, int silent)
 	struct path lower_path;
 	char *dev_name = (char *) raw_data;
 	struct inode *inode;
-	struct nameidata nd;	
+	struct nameidata nd;
 	struct qstr trashbin_qstr;
 	unsigned int trashbin_mode = 0;
 	struct inode* lower_inode;
@@ -109,60 +109,63 @@ static int wrapfs_read_super(struct super_block *sb, void *raw_data, int silent)
 		       dev_name, lower_sb->s_type->name);
 
 	dentry_root = dget(sb->s_root);
-        
+
 	trashbin_qstr.len = strlen(trash);
         trashbin_qstr.name = trash;
         trashbin_qstr.hash = full_name_hash(trash,strlen(trash));
 	trashbin_dentry =  d_alloc(dentry_root, &trashbin_qstr);
 	nd.flags = LOOKUP_DIRECTORY;
-	
-	err_dentry = wrapfs_lookup(dentry_root->d_inode, trashbin_dentry, &nd);
-	
-	err =PTR_ERR(err_dentry);
-	if(IS_ERR(err_dentry) && err!=-ENOENT)
-	{
-		goto out_freeroot;
-	}	
 
-	if(trashbin_dentry->d_inode==NULL)
-	{
-		 trashbin_mode =  trashbin_mode |(S_IFDIR | S_IRWXU | S_IRWXG| S_IRWXO);
-                 err = wrapfs_mkdir(dentry_root->d_inode, trashbin_dentry, trashbin_mode);
-		 if(!err)
-		 {
-		 	printk("Created a new .trash in the root directory mode %d", trashbin_mode);
-			trashbin_dentry->d_inode->i_mode |= trashbin_mode;
- 	        	lower_inode = wrapfs_lower_inode(trashbin_dentry->d_inode);
-			lower_inode->i_mode |=trashbin_mode;
-			set_trashbin_dentry(sb, trashbin_dentry);  ///Stuffing into private pointer for dentry
-		 }
-		 else
-		 {
-			goto out_freeroot;
-		 }	
+	err_dentry = wrapfs_lookup(dentry_root->d_inode, trashbin_dentry, &nd);
+
+	err =PTR_ERR(err_dentry);
+	if(IS_ERR(err_dentry) && err!=-ENOENT) {
+		goto out_freeroot;
 	}
-	else 
-	{
+
+	if(trashbin_dentry->d_inode==NULL) {
+		 trashbin_mode =
+			trashbin_mode |(S_IFDIR | S_IRWXU | S_IRWXG| S_IRWXO);
+                 err = wrapfs_mkdir(dentry_root->d_inode, trashbin_dentry,
+			trashbin_mode);
+		 if(!err) {
+			printk("Created a .trash at root: %d", trashbin_mode);
+			trashbin_dentry->d_inode->i_mode |= trashbin_mode;
+			lower_inode = wrapfs_lower_inode(
+						trashbin_dentry->d_inode);
+			lower_inode->i_mode |=trashbin_mode;
+
+			/* stuffing into the private pointer for dentry */
+			set_trashbin_dentry(sb, trashbin_dentry);
+		 }
+		 else {
+			goto out_freeroot;
+		 }
+	}
+	else {
 		#ifdef DEBUG
 		printk(KERN_INFO "Trash Existing");
-	 	#endif
-		set_trashbin_dentry(sb, trashbin_dentry);  ///Stuffing into private pointer for dentry
+		#endif
+
+		/* stuffing into private pointer for dentry */
+		set_trashbin_dentry(sb, trashbin_dentry);
 	}
-	
 
 	goto out; /* all is well */
 
 /* Conclusion*/
 out_freeroot:
-	
+
 	dput(sb->s_root);
 out_iput:
 	iput(inode);
+
 out_sput:
-	/* drop refs we took earlier */
+	/* dropping the references we took earlier */
 	atomic_dec(&lower_sb->s_active);
 	kfree(WRAPFS_SB(sb));
 	sb->s_fs_info = NULL;
+
 out_free:
 	path_put(&lower_path);
 
@@ -177,10 +180,12 @@ struct dentry *wrapfs_mount(struct file_system_type *fs_type, int flags,
 {
 	void *lower_path_name = (void *) dev_name;
 	char* mount_flags = (char*)raw_data;
+
+	/* check for the version flag passed in the command line arguments */
 	if(mount_flags && strcmp(mount_flags, "version")==0)
-		restore_policy = DELETE;		
-		
-	else 
+		restore_policy = DELETE;
+
+	else
 		restore_policy = DONT_DELETE;
 
 	return mount_nodev(fs_type, flags, lower_path_name,
@@ -190,7 +195,8 @@ struct dentry *wrapfs_mount(struct file_system_type *fs_type, int flags,
 void my_generic_shutdown_super(struct super_block *sb)
 {
 	#ifdef DEBUG
-	printk(KERN_INFO "Dentry Reference Count %d\n",get_trashbin_dentry(sb)->d_count);
+	printk(KERN_INFO "Dentry Reference Count %d\n",
+			get_trashbin_dentry(sb)->d_count);
 	#endif
 	dput(get_trashbin_dentry(sb));
 	generic_shutdown_super(sb);

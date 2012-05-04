@@ -67,11 +67,15 @@ static int wrapfs_readdir(struct file *file, void *dirent, filldir_t filldir)
 	lower_file = wrapfs_lower_file(file);
 	err = vfs_readdir(lower_file, filldir, dirent);
 	file->f_pos = lower_file->f_pos;
-	if (err >= 0)		
+	if (err >= 0)
 		fsstack_copy_attr_atime(dentry->d_inode,
 					lower_file->f_path.dentry->d_inode);
 	return err;
 }
+
+/*
+ * Ioctl called by the user, which calls restore() to restore the file
+ */
 
 static long wrapfs_unlocked_ioctl(struct file *file, unsigned int cmd,
 				  unsigned long arg)
@@ -84,39 +88,45 @@ static long wrapfs_unlocked_ioctl(struct file *file, unsigned int cmd,
 	struct file *lower_file;
 	int err_1;
 
-	if(!access_ok(VERIFY_READ, (char*)arg, 0))
-	{
+	if(!access_ok(VERIFY_READ, (char*)arg, 0)) {
 		err = -EFAULT;
 		goto out;
-	}	
+	}
 	user_data_len = strlen_user((char*)arg);
 	user_data = kmalloc(user_data_len, GFP_KERNEL);
-	err_1 = strncpy_from_user(user_data, (char*)arg, user_data_len + 1); // We want the null to be copied as well
-	if(err_1<0)
-	{
+
+	/* We want the null to be copied as well */
+	err_1 = strncpy_from_user(user_data, (char*)arg, user_data_len + 1);
+	if(err_1<0) {
 		err = -EINVAL;
 		printk(KERN_INFO "Malformed Input");
 		goto out;
 	}
+
 	/* XXX: use vfs_ioctl if/when VFS exports it */
-	switch(cmd)
-	{
-	case IORESTORE: 
+
+	/*
+	 * to decide on which function to call based on the ioctl called by
+	 * the user
+	 */
+	switch(cmd) {
+	case IORESTORE:
 			#ifdef DEBUG
 			printk(KERN_INFO "Restore Ioctl received!\n");
-			printk(KERN_INFO "File to be restored %s", user_data); 
+			printk(KERN_INFO "File to be restored %s", user_data);
 			#endif
 			err = restore(user_data, sb);
 			break;
 
 	default:	lower_file = wrapfs_lower_file(file);
 
-    			 /* XXX: use vfs_ioctl if/when VFS exports it */
-        		if (!lower_file || !lower_file->f_op)
-                	goto out;
-        		if (lower_file->f_op->unlocked_ioctl)
-                	err = lower_file->f_op->unlocked_ioctl(lower_file, cmd, arg);
- 
+			 /* XXX: use vfs_ioctl if/when VFS exports it */
+			if (!lower_file || !lower_file->f_op)
+			goto out;
+			if (lower_file->f_op->unlocked_ioctl)
+			err = lower_file->f_op->unlocked_ioctl(lower_file,
+								cmd, arg);
+
 	}
 
 out:

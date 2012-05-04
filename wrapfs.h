@@ -52,9 +52,6 @@
 /* wrapfs root inode number */
 #define WRAPFS_ROOT_INO     1
 
-/* useful for tracking code reachability */
-#define DEBUG
-
 /* operations vectors defined in specific files */
 extern const struct file_operations wrapfs_main_fops;
 extern const struct file_operations wrapfs_dir_fops;
@@ -65,8 +62,6 @@ extern const struct super_operations wrapfs_sops;
 extern const struct dentry_operations wrapfs_dops;
 extern const struct address_space_operations wrapfs_aops, wrapfs_dummy_aops;
 extern const struct vm_operations_struct wrapfs_vm_ops;
-//extern int user_path_parent(int dfd, const char __user *path, struct nameidata *nd, char **name);
-//extern struct dentry *lookup_hash(struct nameidata *nd);
 extern int wrapfs_init_inode_cache(void);
 extern void wrapfs_destroy_inode_cache(void);
 extern int wrapfs_init_dentry_cache(void);
@@ -131,27 +126,25 @@ static inline struct wrapfs_inode_info *WRAPFS_I(const struct inode *inode)
 /* file to private Data */
 #define WRAPFS_F(file) ((struct wrapfs_file_info *)((file)->private_data))
 
-/* file to lower file */
-
-static inline int set_trashbin_dentry(struct super_block* sb, struct dentry* trash_dentry)
+/* sets the global trashbin_dentry */
+static inline int set_trashbin_dentry(struct super_block* sb,
+					struct dentry* trash_dentry)
 {
-	//Can there be more error handling??
-
 	if(!trash_dentry)
 	return -EINVAL;
-	else 
-	{
+	else {
 		WRAPFS_SB(sb)->trashbin_dentry = dget(trash_dentry);
-	//	dget(trash_dentry);
 		return 0;
 	}
 }
 
+/* gets the global trashbin_dentry */
 static inline struct dentry* get_trashbin_dentry(struct super_block * sb)
 {
 	return WRAPFS_SB(sb)->trashbin_dentry;
 }
 
+/* file to lower file */
 static inline struct file *wrapfs_lower_file(const struct file *f)
 {
 	return WRAPFS_F(f)->lower_file;
@@ -183,8 +176,10 @@ static inline struct super_block *wrapfs_lower_super(
 static inline void wrapfs_set_lower_super(struct super_block *sb,
 					  struct super_block *val)
 {
+	/* Initialize the value of trashbin dentry */
 	WRAPFS_SB(sb)->lower_sb = val;
-	WRAPFS_SB(sb)->trashbin_dentry = NULL; //Initialise the value of trashbin dentry
+
+	WRAPFS_SB(sb)->trashbin_dentry = NULL;
 }
 
 /* path based (dentry/mnt) macros */

@@ -234,7 +234,7 @@ static struct dentry *__wrapfs_lookup(struct dentry *dentry, int flags,
 	 */
 	if (err && err != -ENOENT)
 		goto out;
-	
+
 	#ifdef DEBUG
 	printk(KERN_INFO "Before instantiating a new negative dentry");
 	#endif
@@ -244,10 +244,10 @@ static struct dentry *__wrapfs_lookup(struct dentry *dentry, int flags,
 	this.hash = full_name_hash(this.name, this.len);
 	lower_dentry = d_lookup(lower_dir_dentry, &this);
 	if (lower_dentry)
-	{	
+	{
 	goto setup_lower;
 	}
-	
+
 
 	lower_dentry = d_alloc(lower_dir_dentry, &this);
 	if (!lower_dentry) {
@@ -257,7 +257,7 @@ static struct dentry *__wrapfs_lookup(struct dentry *dentry, int flags,
 
 	d_add(lower_dentry, NULL); /* instantiate and hash */
 
-	
+
 setup_lower:
 	lower_path.dentry = lower_dentry;
 	lower_path.mnt = mntget(lower_dir_mnt);
@@ -292,7 +292,7 @@ struct dentry *wrapfs_lookup(struct inode *dir, struct dentry *dentry,
 		ret = ERR_PTR(err);
 		goto out;
 	}
-	
+
 	ret = __wrapfs_lookup(dentry, nd->flags, &lower_parent_path);
 	if (IS_ERR(ret))
 		goto out;

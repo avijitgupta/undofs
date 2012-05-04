@@ -53,4 +53,3 @@ static __inline__ unsigned long long rdtsc(void)
  */
 
 #endif
-
